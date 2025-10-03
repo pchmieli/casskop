@@ -505,11 +505,6 @@ func (rcc *CassandraClusterReconciler) UpdateCassandraRackStatusFirstLayerPhase(
 	if err != nil || len(podsList.Items) < 1 {
 		return
 	}
-	nodesPerRacks := cc.GetNodesPerRacks(dcRackName)
-	if len(podsList.Items) < int(nodesPerRacks) {
-		logrus.WithFields(logrusFields).Infof("StatefulSet is scaling up")
-		return
-	}
 	pod := podsList.Items[len(podsList.Items)-1]
 	if cassandraPodIsReady(&pod) {
 		status.CassandraRackStatus[dcRackName].FirstLayerPhase = api.ClusterFirstLayerRunning.Name
