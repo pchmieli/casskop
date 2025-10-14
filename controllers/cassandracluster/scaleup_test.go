@@ -72,6 +72,15 @@ func TestAddTwoNodes(t *testing.T) {
 
 	assert.Equal(int32(3), rcc.cc.Spec.NodesPerRacks)
 
+	pendingPhase := api.CassandraPhase{
+		Phase:                api.ClusterPhasePending.Name,
+		InitializingSubPhase: nil,
+	}
+	runningPhase := api.CassandraPhase{
+		Phase:                api.ClusterPhaseRunning.Name,
+		InitializingSubPhase: nil,
+	}
+
 	cassandraCluster := rcc.cc.DeepCopy()
 
 	datacenters := cassandraCluster.Spec.Topology.DC
@@ -105,9 +114,8 @@ func TestAddTwoNodes(t *testing.T) {
 		assert.GreaterOrEqual(jolokiaCallsCount(firstPod), 1)
 		assertStatefulsetReplicas(ctx, t, rcc, expectedReplicas+1, cassandraCluster.Namespace, stfsName)
 	}
-
-	assertClusterStatusPhase(assert, rcc, api.ClusterPhasePending)
-	assertRackStatusPhase(assert, rcc, "dc1-rack1", api.ClusterPhasePending)
+	assertClusterStatusPhase(assert, rcc, pendingPhase)
+	assertRackStatusPhase(assert, rcc, "dc1-rack1", pendingPhase)
 	assertClusterStatusLastAction(assert, rcc, api.ActionScaleUp, api.StatusOngoing)
 	assertRackStatusLastAction(assert, rcc, "dc1-rack1", api.ActionScaleUp, api.StatusOngoing)
 
@@ -117,8 +125,8 @@ func TestAddTwoNodes(t *testing.T) {
 	for reconcileIteration := 0; reconcileIteration <= 2; reconcileIteration++ {
 		reconcileValidation(t, rcc, *req)
 		assert.GreaterOrEqual(jolokiaCallsCount(firstPod), 1)
-		assertClusterStatusPhase(assert, rcc, api.ClusterPhasePending)
-		assertRackStatusPhase(assert, rcc, "dc1-rack1", api.ClusterPhaseRunning)
+		assertClusterStatusPhase(assert, rcc, pendingPhase)
+		assertRackStatusPhase(assert, rcc, "dc1-rack1", runningPhase)
 		assertClusterStatusLastAction(assert, rcc, api.ActionScaleUp, api.StatusOngoing)
 		assertRackStatusLastAction(assert, rcc, "dc1-rack1", api.ActionScaleUp, api.StatusOngoing)
 	}
@@ -127,8 +135,8 @@ func TestAddTwoNodes(t *testing.T) {
 	registerJolokiaOperationJoiningNodes(firstPod, 0)
 	reconcileValidation(t, rcc, *req)
 	assert.GreaterOrEqual(jolokiaCallsCount(firstPod), 1)
-	assertClusterStatusPhase(assert, rcc, api.ClusterPhaseRunning)
-	assertRackStatusPhase(assert, rcc, "dc1-rack1", api.ClusterPhaseRunning)
+	assertClusterStatusPhase(assert, rcc, runningPhase)
+	assertRackStatusPhase(assert, rcc, "dc1-rack1", runningPhase)
 	assertClusterStatusLastAction(assert, rcc, api.ActionScaleUp, api.StatusDone)
 	assertRackStatusLastAction(assert, rcc, "dc1-rack1", api.ActionScaleUp, api.StatusDone)
 }

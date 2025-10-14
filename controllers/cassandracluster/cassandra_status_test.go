@@ -180,6 +180,14 @@ func helperCreateCassandraCluster(ctx context.Context, t *testing.T, cassandraCl
 	if !res.Requeue {
 		t.Error("reconcile did not requeue request as expected")
 	}
+	expectedInitialPhase := api.CassandraPhase{
+		Phase:                api.ClusterPhaseInitial.Name,
+		InitializingSubPhase: nil,
+	}
+	assertClusterStatusPhase(assert, rcc, expectedInitialPhase)
+	for _, dcRackName := range cc.GetDCRackNames() {
+		assertRackStatusPhase(assert, rcc, dcRackName, expectedInitialPhase)
+	}
 
 	//Second Reconcile creates objects
 	res, err = rcc.Reconcile(context.TODO(), req)
@@ -229,18 +237,16 @@ func helperCreateCassandraCluster(ctx context.Context, t *testing.T, cassandraCl
 		t.Fatalf("can't get cassandracluster: (%v)", err)
 	}
 
-	assert.Equal(api.ClusterPhaseRunning.Name, cc.Status.Phase)
-
-	for _, dcRackName := range cc.GetDCRackNames() {
-		assert.Equal(cc.Status.CassandraRackStatus[dcRackName].Phase, api.ClusterPhaseRunning.Name,
-			"dc-rack: %s", dcRackName)
-		assert.Equal(cc.Status.CassandraRackStatus[dcRackName].CassandraLastAction.Name, api.ClusterPhaseInitial.Name,
-			"dc-rack: %s", dcRackName)
-		assert.Equal(cc.Status.CassandraRackStatus[dcRackName].CassandraLastAction.Status, api.StatusDone,
-			"dc-rack %s", dcRackName)
+	expectedRunningPhase := api.CassandraPhase{
+		Phase:                api.ClusterPhaseRunning.Name,
+		InitializingSubPhase: nil,
 	}
-	assert.Equal(api.ClusterPhaseInitial.Name, cc.Status.LastClusterAction)
-	assert.Equal(api.StatusDone, cc.Status.LastClusterActionStatus)
+	assertClusterStatusPhase(assert, rcc, expectedRunningPhase)
+	assertClusterStatusLastAction(assert, rcc, api.ClusterPhaseInitial, api.StatusDone)
+	for _, dcRackName := range cc.GetDCRackNames() {
+		assertRackStatusPhase(assert, rcc, dcRackName, expectedRunningPhase)
+		assertRackStatusLastAction(assert, rcc, dcRackName, api.ClusterPhaseInitial, api.StatusDone)
+	}
 
 	return rcc, &req
 }
@@ -483,12 +489,12 @@ func TestUpdateStatusIfDockerImageHasChanged(t *testing.T) {
 
 }
 
-func assertRackStatusPhase(assert *assert.Assertions, rcc *CassandraClusterReconciler, dcRackName string, expectedPhase api.ClusterStateInfo) {
-	assert.Equal(expectedPhase.Name, rcc.cc.Status.CassandraRackStatus[dcRackName].Phase, dcRackName + " phase")
+func assertRackStatusPhase(assert *assert.Assertions, rcc *CassandraClusterReconciler, dcRackName string, expectedPhase api.CassandraPhase) {
+	assert.Equal(expectedPhase, rcc.cc.Status.CassandraRackStatus[dcRackName].CassandraPhase, dcRackName+" phase")
 }
 
-func assertClusterStatusPhase(assert *assert.Assertions, rcc *CassandraClusterReconciler, expectedPhase api.ClusterStateInfo) {
-	assert.Equal(expectedPhase.Name, rcc.cc.Status.Phase, "cluster phase")
+func assertClusterStatusPhase(assert *assert.Assertions, rcc *CassandraClusterReconciler, expectedPhase api.CassandraPhase) {
+	assert.Equal(expectedPhase, rcc.cc.Status.CassandraPhase, "cluster phase")
 }
 
 func assertRackStatusLastAction(assert *assert.Assertions, rcc *CassandraClusterReconciler, dcRackName string, expectedActionType api.ClusterStateInfo, expectedActionStatus string) {
