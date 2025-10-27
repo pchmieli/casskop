@@ -558,11 +558,14 @@ func (rcc *CassandraClusterReconciler) ReconcileRack(ctx context.Context, cc *ap
 
 func (rcc *CassandraClusterReconciler) initiateRackStatusIfNeeded(status *api.CassandraClusterStatus, dcRackName string, cc *api.CassandraCluster, dcName string, rackName string) bool {
 	//If we have added a dc/rack to the CRD, we add it to the Status
-	if _, exists := status.CassandraRackStatus[dcRackName]; !exists {
+	if rackStatus, exists := status.CassandraRackStatus[dcRackName]; !exists {
 		logrus.WithFields(logrus.Fields{"cluster": cc.Name}).Infof("DC-Rack(%s-%s) does not exist, "+
 			"initialize it in status", dcName, rackName)
 		ClusterPhaseMetric.set(api.ClusterPhaseInitial, cc.Name)
 		cc.InitCassandraRackStatus(status, dcName, rackName)
+		return true
+	} else if rackStatus.CassandraPhase.IsInitialButNoSubPhase() {
+		rackStatus.CassandraPhase.InitializingSubPhase = ptr.To(api.ClusterPhaseInitialSubPhaseFirstPodPerRack)
 		return true
 	}
 	return false
