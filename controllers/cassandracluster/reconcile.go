@@ -570,7 +570,7 @@ func (rcc *CassandraClusterReconciler) initiateRackStatusIfNeeded(status *api.Ca
 
 func (rcc *CassandraClusterReconciler) ensureCassandraObjectsDeployed(ctx context.Context,
 	cc *api.CassandraCluster, status *api.CassandraClusterStatus, dc int, rack int,
-	cassandraStatefulSetOptions ...cassandraStatefulSetOption) bool {
+	cassandraStatefulSetModifiers ...cassandraStatefulSetModifier) bool {
 
 	dcName := cc.GetDCName(dc)
 	rackName := cc.GetRackName(dc, rack)
@@ -585,7 +585,7 @@ func (rcc *CassandraClusterReconciler) ensureCassandraObjectsDeployed(ctx contex
 			"dc-rack": dcRackName}).Errorf("ensureCassandraServiceMonitoring Error: %v", err)
 	}
 
-	breakLoop, err := rcc.ensureCassandraStatefulSet(ctx, cc, status, dcName, dcRackName, dc, rack, cassandraStatefulSetOptions...)
+	breakLoop, err := rcc.ensureCassandraStatefulSet(ctx, cc, status, dcName, dcRackName, dc, rack, cassandraStatefulSetModifiers...)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"cluster": cc.Name,
 			"dc-rack": dcRackName}).Errorf("ensureCassandraStatefulSet Error: %v", err)
