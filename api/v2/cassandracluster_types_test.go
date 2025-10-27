@@ -208,7 +208,7 @@ func TestInitCassandraRackinStatus(t *testing.T) {
 
 	initialCassandraPhase := CassandraPhase{
 		Phase:                ClusterPhaseInitial.Name,
-		InitializingSubPhase: ptr.To(ClusterInitialPhaseSubPhaseFirstPodPerRack),
+		InitializingSubPhase: ptr.To(ClusterPhaseInitialSubPhaseFirstPodPerRack),
 	}
 
 	assert.Equal(ClusterPhaseInitial.Name, cc.Status.CassandraRackStatus["online-rack1"].CassandraLastAction.Name)
@@ -485,7 +485,7 @@ func TestSetDefaults(t *testing.T) {
 
 	initialCassandraPhase := CassandraPhase{
 		Phase:                ClusterPhaseInitial.Name,
-		InitializingSubPhase: ptr.To(ClusterInitialPhaseSubPhaseFirstPodPerRack),
+		InitializingSubPhase: ptr.To(ClusterPhaseInitialSubPhaseFirstPodPerRack),
 	}
 	assert.Equal(initialCassandraPhase, cluster.Status.CassandraPhase)
 	assert.Equal(int32(defaultMaxPodUnavailable), cluster.Spec.MaxPodUnavailable)
@@ -512,7 +512,7 @@ func TestAddSubPhase(t *testing.T) {
 
 	initialCassandraPhase := CassandraPhase{
 		Phase:                ClusterPhaseInitial.Name,
-		InitializingSubPhase: ptr.To(ClusterInitialPhaseSubPhaseFirstPodPerRack),
+		InitializingSubPhase: ptr.To(ClusterPhaseInitialSubPhaseFirstPodPerRack),
 	}
 	assert.Equal(initialCassandraPhase, cluster.Status.CassandraPhase)
 }

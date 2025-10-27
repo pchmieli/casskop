@@ -184,11 +184,11 @@ func helperCreateCassandraCluster(ctx context.Context, t *testing.T, cassandraCl
 	}
 	expectedInitialPhase := api.CassandraPhase{
 		Phase:                api.ClusterPhaseInitial.Name,
-		InitializingSubPhase: ptr.To(api.ClusterInitialPhaseSubPhaseFirstPodPerRack),
+		InitializingSubPhase: ptr.To(api.ClusterPhaseInitialSubPhaseFirstPodPerRack),
 	}
 	expectedFirstPodPerRackReadyPhase := api.CassandraPhase{
 		Phase:                api.ClusterPhaseInitial.Name,
-		InitializingSubPhase: ptr.To(api.ClusterInitialPhaseSubPhaseNextPodPerRack),
+		InitializingSubPhase: ptr.To(api.ClusterPhaseInitialSubPhaseNextPodPerRack),
 	}
 	expectedRunningPhase := api.CassandraPhase{
 		Phase:                api.ClusterPhaseRunning.Name,
