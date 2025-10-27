@@ -610,7 +610,7 @@ func (rcc *CassandraClusterReconciler) ReconcileFirstPodPerRack(ctx context.Cont
 		return breakResyncLoop, nil
 	}
 
-	err := rcc.ReconcileRackFirstPod(ctx, cc, status)
+	err := rcc.reconcileFirstPodPerRack(ctx, cc, status)
 	if err != nil {
 		return breakResyncLoop, err
 	}
@@ -618,8 +618,8 @@ func (rcc *CassandraClusterReconciler) ReconcileFirstPodPerRack(ctx context.Cont
 	return breakResyncLoop, nil
 }
 
-// ReconcileRackFirstPod will try to create one node for each of the couple DC/Rack defined in the topology
-func (rcc *CassandraClusterReconciler) ReconcileRackFirstPod(ctx context.Context, cc *api.CassandraCluster,
+// reconcileFirstPodPerRack will try to create one node for each of the couple DC/Rack defined in the topology
+func (rcc *CassandraClusterReconciler) reconcileFirstPodPerRack(ctx context.Context, cc *api.CassandraCluster,
 	status *api.CassandraClusterStatus) (err error) {
 
 	newStatus := false
@@ -660,7 +660,7 @@ func (rcc *CassandraClusterReconciler) ReconcileRackFirstPod(ctx context.Context
 			if dcRackStatus.IsInFirstPodPerRackInitPhase() {
 				logrus.WithFields(logrus.Fields{"cluster": cc.Name,
 					"dc-rack": dcRackName}).Infof("Waiting Rack to be have one pod running before continuing, " +
-					"we break ReconcileRackFirstPod after updated statefulset")
+					"we break reconcileFirstPodPerRack after updated statefulset")
 				return nil
 			}
 		}
