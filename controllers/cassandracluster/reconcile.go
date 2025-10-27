@@ -593,21 +593,16 @@ func (rcc *CassandraClusterReconciler) ensureCassandraObjectsDeployed(ctx contex
 	return breakLoop
 }
 
+func (rcc *CassandraClusterReconciler) FirstPodPerRackFlowEnabled(cc *api.CassandraCluster) bool {
+	featureDisabled := strings.ToLower(cc.Annotations["cassandraclusters.db.orange.com/disable-first-pod-per-rack-init-flow"]) == "true"
+	return !featureDisabled
+}
+
 func (rcc *CassandraClusterReconciler) ReconcileFirstPodPerRack(ctx context.Context, cc *api.CassandraCluster,
 	status *api.CassandraClusterStatus) (bool, error) {
 
 	if !status.IsInFirstPodPerRackInitPhase() {
 		return continueResyncLoop, nil
-	}
-
-	featureDisabled := strings.ToLower(cc.Annotations["cassandraclusters.db.orange.com/disable-first-pod-per-rack-init-flow"]) == "true"
-	if featureDisabled {
-		status.SetNextPodPerRackInitPhase()
-		for _, rackStatus := range status.CassandraRackStatus {
-			rackStatus.SetNextPodPerRackInitPhase()
-		}
-		// break to store the updated status
-		return breakResyncLoop, nil
 	}
 
 	err := rcc.reconcileFirstPodPerRack(ctx, cc, status)
