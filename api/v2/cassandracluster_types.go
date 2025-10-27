@@ -1027,7 +1027,7 @@ func (in *CassandraClusterStatus) SetRunningPhase() {
 	}
 }
 
-func (in *CassandraClusterStatus) RackPhaseDifferentThan(dcRackName string, cassandraPhase CassandraPhase) bool {
+func (in *CassandraClusterStatus) HasRackPhaseChanged(dcRackName string, cassandraPhase CassandraPhase) bool {
 	rackStatus, ok := in.CassandraRackStatus[dcRackName]
 	return !ok || rackStatus.CassandraPhase != cassandraPhase
 }

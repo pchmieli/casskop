@@ -645,7 +645,7 @@ func UpdateCassandraClusterStatusPhase(cc *api.CassandraCluster, status *api.Cas
 			if !dcRackStatus.IsInRunningPhase() {
 				status.SetClusterPhaseFromRackPhase(dcRackStatus)
 
-				if cc.Status.RackPhaseDifferentThan(dcRackName, dcRackStatus.CassandraPhase) {
+				if cc.Status.HasRackPhaseChanged(dcRackName, dcRackStatus.CassandraPhase) {
 					logrus.WithFields(logrus.Fields{"cluster": cc.Name,
 						"dc-rack": dcRackName}).Infof("Update Rack Status: %v", dcRackStatus.CassandraPhase)
 				}
