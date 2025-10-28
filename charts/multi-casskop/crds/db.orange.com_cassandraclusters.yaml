@@ -2270,10 +2270,16 @@ spec:
                             type: array
                             items:
                               type: string
+                      initializingSubPhase:
+                        description: |-
+                          initializingSubPhase adds detail to Initial phase
+                          initializingSubPhase goes one way as below:
+                           FirstPodPerRack -> NextPodPerRack
+                        type: string
                       phase:
                         description: |-
-                          Phase indicates the state this Cassandra cluster jumps in.
-                          Phase goes as one way as below:
+                          phase indicates the state this Cassandra cluster jumps in.
+                          phase goes as one way as below:
                             Initial -> Running <-> updating
                         type: string
                       podLastOperation:
@@ -2308,6 +2314,12 @@ spec:
                             format: date-time
                           status:
                             type: string
+                initializingSubPhase:
+                  description: |-
+                    initializingSubPhase adds detail to Initial phase
+                    initializingSubPhase goes one way as below:
+                     FirstPodPerRack -> NextPodPerRack
+                  type: string
                 lastClusterAction:
                   description: Store last action at cluster level
                   type: string
@@ -2315,8 +2327,8 @@ spec:
                   type: string
                 phase:
                   description: |-
-                    Phase indicates the state this Cassandra cluster jumps in.
-                    Phase goes as one way as below:
+                    phase indicates the state this Cassandra cluster jumps in.
+                    phase goes as one way as below:
                       Initial -> Running <-> updating
                   type: string
                 seedlist:

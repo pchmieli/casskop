@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -49,11 +50,21 @@ type ClusterStateInfo struct {
 	Name string
 }
 
+type InitializingSubPhase string
+
+func (p InitializingSubPhase) IsEmpty() bool {
+	return len(p) == 0
+}
+
 var (
 	//Cluster phases
 	ClusterPhaseInitial = ClusterStateInfo{1, "Initializing"}
 	ClusterPhaseRunning = ClusterStateInfo{2, "Running"}
 	ClusterPhasePending = ClusterStateInfo{3, "Pending"}
+
+	//Cluster Initializing sub-phases
+	ClusterPhaseInitialSubPhaseFirstPodPerRack InitializingSubPhase = "FirstPodPerRack"
+	ClusterPhaseInitialSubPhaseNextPodPerRack  InitializingSubPhase = "NextPodPerRack"
 
 	//Available actions
 	ActionUpdateConfigMap   = ClusterStateInfo{1, "UpdateConfigMap"}
@@ -169,14 +180,21 @@ func (cc *CassandraCluster) SetDefaults() bool {
 		ccs.NodesPerRacks = 1
 		changed = true
 	}
-	if len(cc.Status.Phase) == 0 {
-		cc.Status.Phase = ClusterPhaseInitial.Name
+	if cc.Status.CassandraPhase.IsEmpty() {
+		cc.Status.CassandraPhase = CassandraPhase{
+			Phase:                ClusterPhaseInitial.Name,
+			InitializingSubPhase: ptr.To(ClusterPhaseInitialSubPhaseFirstPodPerRack),
+		}
 		if cc.InitCassandraRackList() < 1 {
 			logrus.Errorf("[%s]: We should have at list One Rack, Please correct the Error", cc.Name)
 		}
 		if cc.Status.SeedList == nil {
 			cc.Status.SeedList = cc.InitSeedList()
 		}
+		changed = true
+	}
+	if cc.Status.CassandraPhase.IsInitialButNoSubPhase() {
+		cc.Status.CassandraPhase.InitializingSubPhase = ptr.To(ClusterPhaseInitialSubPhaseFirstPodPerRack)
 		changed = true
 	}
 	if ccs.MaxPodUnavailable == 0 {
@@ -306,7 +324,10 @@ func (cc *CassandraCluster) initTopology(dcName string, rackName string) {
 func (cc *CassandraCluster) InitCassandraRackStatus(status *CassandraClusterStatus, dcName string, rackName string) {
 	dcRackName := cc.GetDCRackName(dcName, rackName)
 	rackStatus := CassandraRackStatus{
-		Phase: ClusterPhaseInitial.Name,
+		CassandraPhase: CassandraPhase{
+			Phase:                ClusterPhaseInitial.Name,
+			InitializingSubPhase: ptr.To(ClusterPhaseInitialSubPhaseFirstPodPerRack),
+		},
 		CassandraLastAction: CassandraLastAction{
 			Name:   ClusterPhaseInitial.Name,
 			Status: StatusOngoing,
@@ -931,12 +952,53 @@ type BackRestSidecar struct {
 	VolumeMounts []v1.VolumeMount         `json:"volumeMount,omitempty"`
 }
 
-// CassandraRackStatus defines states of Cassandra for 1 rack (1 statefulset)
-type CassandraRackStatus struct {
-	// Phase indicates the state this Cassandra cluster jumps in.
-	// Phase goes as one way as below:
+type CassandraPhase struct {
+	// phase indicates the state this Cassandra cluster jumps in.
+	// phase goes as one way as below:
 	//   Initial -> Running <-> updating
 	Phase string `json:"phase,omitempty"`
+
+	// initializingSubPhase adds detail to Initial phase
+	// initializingSubPhase goes one way as below:
+	//  FirstPodPerRack -> NextPodPerRack
+	InitializingSubPhase *InitializingSubPhase `json:"initializingSubPhase,omitempty"`
+}
+
+func (p CassandraPhase) String() string {
+	if p.InitializingSubPhase != nil {
+		return fmt.Sprintf("%s (%s)", p.Phase, *p.InitializingSubPhase)
+	}
+	return p.Phase
+}
+
+func (p *CassandraPhase) IsEmpty() bool {
+	return p.Phase == ""
+}
+
+func (p *CassandraPhase) SubPhaseMigrationNeeded() bool {
+	// currently only one condition triggers subphase migration
+	return p.IsInitialButNoSubPhase()
+}
+
+func (p *CassandraPhase) IsInitialButNoSubPhase() bool {
+	return p.IsInInitialPhase() && (p.InitializingSubPhase == nil || p.InitializingSubPhase.IsEmpty())
+}
+
+func (p *CassandraPhase) IsInInitialPhase() bool {
+	return p.Phase == ClusterPhaseInitial.Name
+}
+
+func (p *CassandraPhase) IsInFirstPodPerRackInitPhase() bool {
+	return p.IsInInitialPhase() && p.InitializingSubPhase != nil && *p.InitializingSubPhase == ClusterPhaseInitialSubPhaseFirstPodPerRack
+}
+
+func (p *CassandraPhase) IsInRunningPhase() bool {
+	return p.Phase == ClusterPhaseRunning.Name
+}
+
+// CassandraRackStatus defines states of Cassandra for 1 rack (1 statefulset)
+type CassandraRackStatus struct {
+	CassandraPhase `json:",inline"`
 
 	// CassandraLastAction is the set of Cassandra State & Actions: Active, Standby..
 	CassandraLastAction CassandraLastAction `json:"cassandraLastAction,omitempty"`
@@ -945,12 +1007,30 @@ type CassandraRackStatus struct {
 	PodLastOperation PodLastOperation `json:"podLastOperation,omitempty"`
 }
 
+func (in *CassandraRackStatus) SetNextPodPerRackInitPhase() {
+	in.CassandraPhase = CassandraPhase{
+		Phase:                ClusterPhaseInitial.Name,
+		InitializingSubPhase: ptr.To(ClusterPhaseInitialSubPhaseNextPodPerRack),
+	}
+}
+
+func (in *CassandraRackStatus) SetPendingPhase() {
+	in.CassandraPhase = CassandraPhase{
+		Phase:                ClusterPhasePending.Name,
+		InitializingSubPhase: nil,
+	}
+}
+
+func (in *CassandraRackStatus) SetRunningPhase() {
+	in.CassandraPhase = CassandraPhase{
+		Phase:                ClusterPhaseRunning.Name,
+		InitializingSubPhase: nil,
+	}
+}
+
 // CassandraClusterStatus defines Global state of CassandraCluster
 type CassandraClusterStatus struct {
-	// Phase indicates the state this Cassandra cluster jumps in.
-	// Phase goes as one way as below:
-	//   Initial -> Running <-> updating
-	Phase string `json:"phase,omitempty"`
+	CassandraPhase `json:",inline"`
 
 	// Store last action at cluster level
 	LastClusterAction       string `json:"lastClusterAction,omitempty"`
@@ -967,6 +1047,29 @@ type CassandraClusterStatus struct {
 
 	//CassandraRackStatusList list status for each Rack
 	CassandraRackStatus map[string]*CassandraRackStatus `json:"cassandraRackStatus,omitempty"`
+}
+
+func (in *CassandraClusterStatus) SetClusterPhaseFromRackPhase(rackStatus *CassandraRackStatus) {
+	in.CassandraPhase = *rackStatus.CassandraPhase.DeepCopy()
+}
+
+func (in *CassandraClusterStatus) SetNextPodPerRackInitPhase() {
+	in.CassandraPhase = CassandraPhase{
+		Phase:                ClusterPhaseInitial.Name,
+		InitializingSubPhase: ptr.To(ClusterPhaseInitialSubPhaseNextPodPerRack),
+	}
+}
+
+func (in *CassandraClusterStatus) SetRunningPhase() {
+	in.CassandraPhase = CassandraPhase{
+		Phase:                ClusterPhaseRunning.Name,
+		InitializingSubPhase: nil,
+	}
+}
+
+func (in *CassandraClusterStatus) HasRackPhaseChanged(dcRackName string, cassandraPhase CassandraPhase) bool {
+	rackStatus, ok := in.CassandraRackStatus[dcRackName]
+	return !ok || rackStatus.CassandraPhase != cassandraPhase
 }
 
 // CassandraLastAction defines status of the CassandraStatefulset

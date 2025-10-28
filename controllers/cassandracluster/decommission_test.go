@@ -80,13 +80,35 @@ func deletePodNotDeletedByFakeClient(rcc *CassandraClusterReconciler, host podNa
 		Namespace: rcc.cc.Namespace}})
 }
 
+func simulateStsAfterDecommission(t *testing.T, rcc *CassandraClusterReconciler, stfsName string) {
+	assert := assert.New(t)
+
+	sts, err := rcc.GetStatefulSet(ctx, rcc.cc.Namespace, stfsName)
+	assert.NoError(err, "get sts")
+
+	//Now simulate sts to be ready for CassKop
+	sts.Status.Replicas = *sts.Spec.Replicas
+	sts.Status.ReadyReplicas = *sts.Spec.Replicas
+	err = rcc.Client.Status().Update(ctx, sts)
+	assert.NoError(err, "update sts status")
+}
+
 func TestOneDecommission(t *testing.T) {
-	ctx := context.TODO()
-	rcc, req := createCassandraClusterWithNoDisruption(t, "cassandracluster-1DC.yaml")
+	overrideDelayWaitWithNoDelay()
+	defer restoreDefaultDelayWait()
 
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 	assert := assert.New(t)
+
+	ctx := context.TODO()
+	rcc, req := createCassandraClusterWithNoDisruption(t, "cassandracluster-1DC.yaml")
+
+	assertClusterStatusLastAction(assert, rcc, api.ClusterPhaseInitial, api.StatusDone)
+	assertClusterStatusPhase(assert, rcc, api.CassandraPhase{
+		Phase:                api.ClusterPhaseRunning.Name,
+		InitializingSubPhase: nil,
+	})
 
 	assert.Equal(int32(3), rcc.cc.Spec.NodesPerRacks)
 
@@ -109,16 +131,31 @@ func TestOneDecommission(t *testing.T) {
 	reconcileValidation(t, rcc, *req)
 	assert.GreaterOrEqual(jolokiaCallsCount(lastPod), 1)
 	assertStatefulsetReplicas(ctx, t, rcc, 3, cassandraCluster.Namespace, stfsName)
+	assertClusterStatusLastAction(assert, rcc, api.ActionScaleDown, api.StatusToDo)
+	assertClusterStatusPhase(assert, rcc, api.CassandraPhase{
+		Phase:                api.ClusterPhasePending.Name,
+		InitializingSubPhase: nil,
+	})
 
 	registerJolokiaOperationModeResponder(lastPod, LEAVING)
 	reconcileValidation(t, rcc, *req)
 	assert.GreaterOrEqual(jolokiaCallsCount(lastPod), 1)
 	assertStatefulsetReplicas(ctx, t, rcc, 3, cassandraCluster.Namespace, stfsName)
+	assertClusterStatusLastAction(assert, rcc, api.ActionScaleDown, api.StatusToDo)
+	assertClusterStatusPhase(assert, rcc, api.CassandraPhase{
+		Phase:                api.ClusterPhasePending.Name,
+		InitializingSubPhase: nil,
+	})
 
 	registerJolokiaOperationModeResponder(lastPod, DECOMMISSIONED)
 	reconcileValidation(t, rcc, *req)
 	assert.GreaterOrEqual(jolokiaCallsCount(lastPod), 1)
 	assertStatefulsetReplicas(ctx, t, rcc, 2, cassandraCluster.Namespace, stfsName)
+	assertClusterStatusLastAction(assert, rcc, api.ActionScaleDown, api.StatusOngoing)
+	assertClusterStatusPhase(assert, rcc, api.CassandraPhase{
+		Phase:                api.ClusterPhasePending.Name,
+		InitializingSubPhase: nil,
+	})
 
 	deletedPod := podHost(stfsName, 2, rcc)
 	assert.Equal(1, jolokiaCallsCount(deletedPod))
@@ -134,9 +171,29 @@ func TestOneDecommission(t *testing.T) {
 	reconcileValidation(t, rcc, *req)
 	assert.Equal(0, jolokiaCallsCount(lastPod))
 	assert.Equal(api.StatusDone, rcc.cc.Status.CassandraRackStatus["dc1-rack1"].PodLastOperation.Status)
+	assertClusterStatusLastAction(assert, rcc, api.ActionScaleDown, api.StatusOngoing)
+	assertClusterStatusPhase(assert, rcc, api.CassandraPhase{
+		Phase:                api.ClusterPhasePending.Name,
+		InitializingSubPhase: nil,
+	})
 
 	reconcileValidation(t, rcc, *req)
 	assert.Equal(0, jolokiaCallsCount(lastPod))
+	assertClusterStatusLastAction(assert, rcc, api.ActionScaleDown, api.StatusContinue)
+	assertClusterStatusPhase(assert, rcc, api.CassandraPhase{
+		Phase:                api.ClusterPhasePending.Name,
+		InitializingSubPhase: nil,
+	})
+
+	simulateStsAfterDecommission(t, rcc, stfsName)
+
+	reconcileValidation(t, rcc, *req)
+	assert.Equal(0, jolokiaCallsCount(lastPod))
+	assertClusterStatusLastAction(assert, rcc, api.ActionScaleDown, api.StatusDone)
+	assertClusterStatusPhase(assert, rcc, api.CassandraPhase{
+		Phase:                api.ClusterPhaseRunning.Name,
+		InitializingSubPhase: nil,
+	})
 }
 
 func assertStatefulsetReplicas(ctx context.Context, t *testing.T, rcc *CassandraClusterReconciler, expected int, namespace, stfsName string) {
