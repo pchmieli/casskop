@@ -1,0 +1,196 @@
+package storageupsize
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/banzaicloud/k8s-objectmatcher/patch"
+	api "github.com/cscetbon/casskop/api/v2"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/consts"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/pods"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/actionstep"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/lastapplied"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
+	"github.com/cscetbon/casskop/pkg/k8s"
+	json "github.com/json-iterator/go"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+func prepareStatefulSetDump(storedStatefulSet *appsv1.StatefulSet) (string, error) {
+	statefulSetDump := storedStatefulSet.DeepCopy()
+
+	statefulSetDump.GenerateName = ""
+	statefulSetDump.SelfLink = ""
+	statefulSetDump.UID = ""
+	statefulSetDump.ResourceVersion = ""
+	statefulSetDump.Generation = 0
+	statefulSetDump.CreationTimestamp = metav1.Time{}
+	statefulSetDump.DeletionTimestamp = nil
+	statefulSetDump.DeletionGracePeriodSeconds = nil
+	statefulSetDump.ManagedFields = nil
+
+	statefulSetDump.TypeMeta = metav1.TypeMeta{}
+	statefulSetDump.Status = appsv1.StatefulSetStatus{}
+
+	statefulSetDumpJson, err := json.ConfigCompatibleWithStandardLibrary.Marshal(statefulSetDump)
+	if err != nil {
+		return "", err
+	}
+	return string(statefulSetDumpJson), nil
+}
+
+func applyPVCModification(newStatefulSet *appsv1.StatefulSet, setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error) error {
+	err := setNewDataCapacity(newStatefulSet)
+	if err != nil {
+		return err
+	}
+	return enrichWithCleanLastAppliedAnnotation(newStatefulSet, setNewDataCapacity)
+}
+
+// enrichWithCleanLastAppliedAnnotation
+//
+// 1. Why not create statefulSet directly from the CR?
+//   - because other changes may have been introduced (e.g. scaling or other changes in the pod template)
+//     we don't want other actions to interfere with the resize process
+//
+// 2. Why not create statefulSet from the old CR (last-applied-configuration)?
+//   - because other changes may also have been introduced
+//     -- someone starts a scale-in
+//     -- then changes dataCapacity
+//     -- the first rack will still be done correctly,
+//     but in the second, at the end of the resize,
+//     a StatefulSet with a smaller number of replicas will be applied immediately, without calling decommission
+//
+// 3. Why do we need to manually handle last-applied annotation on the storedStatefulSet?
+//   - Banzai stores the original object in annotations and performs a 3-way merge on update
+//   - storedStatefulSet is an object fetched from k8s API, so it contains kubernetes garbage/defaults
+//   - if we simply did
+//     `patch.DefaultAnnotator.SetLastAppliedAnnotation(newStatefulSet)`
+//     we would put into the annotations an object with Kubernetes garbage/defaults
+//   - that would force an update during the 3-way merge after the resize
+//     (StatefulSet generated from the CR would be clean and would not match the polluted last-applied in the stored StatefulSet)
+func enrichWithCleanLastAppliedAnnotation(newStatefulSet *appsv1.StatefulSet,
+	setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error) error {
+
+	originalStatefulSet, err := lastapplied.GetOriginalSts(newStatefulSet)
+	if err != nil {
+		// best effort: cannot get original sts so skip setting last-applied annotation, would lead to extra update after resize (no pod restart)
+		return nil
+	}
+
+	err = setNewDataCapacity(&originalStatefulSet)
+	if err != nil {
+		// best effort: cannot edit original sts so skip setting last-applied annotation, would lead to extra update after resize (no pod restart)
+		return nil
+	}
+
+	lastApplied, err := lastapplied.EncodeLastAppliedConfigAnnotation(originalStatefulSet)
+	if err != nil {
+		// best effort: cannot encode original sts so skip setting last-applied annotation, would lead to extra update after resize (no pod restart)
+		return nil
+	}
+	newStatefulSet.Annotations[patch.LastAppliedConfig] = lastApplied
+
+	return nil
+}
+
+func removeStatefulSetOrphan(ctx context.Context, cc *api.CassandraCluster, rack view.RackView, stsClient sts.StsClient) actionstep.StepResult {
+	if !rack.StoredStatefulSetExists() {
+		return actionstep.Pass()
+	}
+
+	if doesStatefulSetHasNewCapacity(cc, rack.StoredStatefulSet()) {
+		return actionstep.Pass()
+	}
+
+	rack.Log().Info("Deleting StatefulSet with orphan option")
+	err := stsClient.DeleteStatefulSetWithOrphanOption(ctx, cc.Namespace, rack.StoredStatefulSet().Name)
+	if err != nil {
+		return actionstep.Error(err)
+	}
+
+	return actionstep.Break()
+}
+
+func doesStatefulSetHasNewCapacity(cc *api.CassandraCluster, storedStatefulSet *appsv1.StatefulSet) bool {
+	requested := silentParseResourceQuantity(cc.Spec.DataCapacity)
+	_, current := findDataCapacity(storedStatefulSet.Spec.VolumeClaimTemplates)
+	return requested.Equal(current)
+}
+
+func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView,
+	setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error, stsClient sts.StsClient) actionstep.StepResult {
+
+	if rack.StoredStatefulSetExists() {
+		return actionstep.Pass()
+	}
+
+	rack.Log().Info("Creating StatefulSet with new capacity")
+
+	newStatefulSet, err := unmarshallDumpedStatefulSet(rack)
+	if err != nil {
+		return actionstep.Error(err)
+	}
+
+	err = applyPVCModification(newStatefulSet, setNewDataCapacity)
+	if err != nil {
+		return actionstep.Error(err)
+	}
+
+	err = stsClient.CreateStatefulSet(ctx, newStatefulSet)
+	if err != nil {
+		return actionstep.Error(err)
+	}
+
+	return actionstep.Break()
+}
+
+func waitTillStatefulSetAndAllPodsAreReady(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
+	podsClient pods.PodsClient) actionstep.StepResult {
+
+	if !doesStatefulSetHasNewCapacity(cc, rack.StoredStatefulSet()) {
+		rack.Log().Infof("Resize action is in progress, statefulset need to be re-created with new capacity")
+		return actionstep.Break()
+	}
+
+	if sts.IsStatefulSetReady(rack.StoredStatefulSet()) {
+		podList, err := podsClient.ListPods(ctx, cc.Namespace, k8s.LabelsForCassandraDCRack(cc, rack.DcName(), rack.RackName()))
+		if err != nil {
+			return actionstep.Error(err)
+		}
+		expectedNodesPerRacks := *rack.StoredStatefulSet().Spec.Replicas
+		if len(podList.Items) != int(expectedNodesPerRacks) {
+			errMsg := fmt.Sprintf("Number of pods (%d) different than expected Replicas (%d) for DC-Rack %s",
+				len(podList.Items), expectedNodesPerRacks, rack.DcRackName())
+			rack.Log().Warn(errMsg)
+			return actionstep.Error(err)
+		}
+		if allPodsReady(podList) {
+			rack.Log().Info("Resize action finalization, " +
+				"all pods are ready with new DataCapacity, we can finalize the action")
+			finalizeUpsizeAction(rack.RackStatus())
+			return actionstep.Pass()
+		}
+	}
+
+	rack.Log().Info("Resize action is in progress, " +
+		"we wait for all pods to be ready with new DataCapacity before finalizing the action")
+	return actionstep.Break()
+}
+
+func DataCapacitySetter(dataCapacity resource.Quantity) func(statefulSet *appsv1.StatefulSet) error {
+	return func(statefulSet *appsv1.StatefulSet) error {
+		for i, template := range statefulSet.Spec.VolumeClaimTemplates {
+			if template.Name == consts.DataPVCName {
+				template.Spec.Resources.Requests["storage"] = dataCapacity
+				statefulSet.Spec.VolumeClaimTemplates[i] = template
+				return nil
+			}
+		}
+		return errors.New(fmt.Sprintf("no %s pvc found in statefulSet %s", consts.DataPVCName, statefulSet.Name))
+	}
+}

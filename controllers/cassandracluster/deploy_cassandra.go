@@ -89,7 +89,7 @@ func (rcc *CassandraClusterReconciler) podDisruptionBudgetEnvelope(cc *api.Cassa
 // take dcRackName to accordingly named the statefulset
 // take dc and rack index of dc and rack in conf to retrieve according  nodeselectors labels
 func (rcc *CassandraClusterReconciler) ensureCassandraStatefulSet(ctx context.Context, cc *api.CassandraCluster,
-	status *api.CassandraClusterStatus, dcName string, dcRackName string, dc int, rack int) (bool, error) {
+	status *api.CassandraClusterStatus, dcName, rackName, dcRackName string, dc int, rack int) (bool, error) {
 
 	labels, nodeSelector := k8s.DCRackLabelsAndNodeSelectorForStatefulSet(cc, dc, rack)
 
@@ -99,7 +99,7 @@ func (rcc *CassandraClusterReconciler) ensureCassandraStatefulSet(ctx context.Co
 	}
 	k8s.AddOwnerRefToObject(ss, k8s.AsOwner(cc))
 
-	breakResyncloop, err := rcc.CreateOrUpdateStatefulSet(ctx, ss, status, dcRackName)
+	breakResyncloop, err := rcc.CreateOrUpdateStatefulSet(ctx, ss, status, dcName, rackName, dcRackName)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return breakResyncloop, fmt.Errorf("failed to create cassandra statefulset: %v", err)
 	}

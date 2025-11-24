@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/cscetbon/casskop/controllers/cassandracluster/cassandrapod"
 	"github.com/cscetbon/casskop/pkg/k8s"
 
 	v1 "k8s.io/api/core/v1"
@@ -71,7 +72,7 @@ func GetLastOrFirstPod(podsList *v1.PodList, last bool) (*v1.Pod, error) {
 func GetLastOrFirstPodReady(podsList []v1.Pod, last bool) (*v1.Pod, error) {
 	var readyPods []v1.Pod
 	for _, pod := range podsList {
-		if cassandraPodIsReady(&pod) {
+		if cassandrapod.IsReady(&pod) {
 			readyPods = append(readyPods, pod)
 		}
 	}

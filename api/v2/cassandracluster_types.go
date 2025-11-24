@@ -70,6 +70,8 @@ var (
 
 	ActionCorrectCRDConfig = ClusterStateInfo{11, "CorrectCRDConfig"} //The Operator has correct a bad CRD configuration
 
+	ActionStorageUpsize = ClusterStateInfo{12, "StorageUpsize"}
+
 	regexDCRackName = regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 )
 
@@ -943,6 +945,8 @@ type CassandraRackStatus struct {
 
 	// PodLastOperation manage status for Pod Operation (nodetool cleanup, upgradesstables..)
 	PodLastOperation PodLastOperation `json:"podLastOperation,omitempty"`
+
+	StatefulSetDumpBeforeStorageResize string `json:"statefulSetDumpBeforeStorageResize,omitempty"`
 }
 
 // CassandraClusterStatus defines Global state of CassandraCluster

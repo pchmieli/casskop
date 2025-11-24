@@ -24,10 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/banzaicloud/k8s-objectmatcher/patch"
-	"k8s.io/apimachinery/pkg/util/wait"
-
 	"github.com/allamand/godebug/pretty"
+	"github.com/banzaicloud/k8s-objectmatcher/patch"
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/pkg/k8s"
 	"github.com/sirupsen/logrus"
@@ -36,6 +34,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 var (
@@ -70,19 +69,6 @@ func (rcc *CassandraClusterReconciler) DeleteStatefulSet(ctx context.Context, na
 		},
 	}
 	return rcc.Client.Delete(ctx, ss)
-}
-
-// CreateStatefulSet create a new statefulset ss
-func (rcc *CassandraClusterReconciler) CreateStatefulSet(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
-	err := rcc.Client.Create(ctx, statefulSet)
-	if err != nil {
-		if !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("statefulset already exists: %cc", err)
-		}
-		return fmt.Errorf("failed to create cassandra statefulset: %cc", err)
-		//return err
-	}
-	return nil
 }
 
 // UpdateStatefulSet updates an existing statefulset ss
@@ -204,7 +190,8 @@ func tryJsonPrettyPrint(patchResult []byte) string {
 
 // CreateOrUpdateStatefulSet Create statefulset if not found, or update it
 func (rcc *CassandraClusterReconciler) CreateOrUpdateStatefulSet(ctx context.Context, statefulSet *appsv1.StatefulSet,
-	status *api.CassandraClusterStatus, dcRackName string) (bool, error) {
+	status *api.CassandraClusterStatus, dcName, rackName, dcRackName string) (bool, error) {
+
 	// if there is an existing pod disruptions
 	// Or if we are not scaling Down the current statefulset
 	if !rcc.hasNoPodDisruption() {
@@ -278,6 +265,8 @@ func (rcc *CassandraClusterReconciler) CreateOrUpdateStatefulSet(ctx context.Con
 		*statefulSet.Spec.Replicas = *rcc.storedStatefulSet.Spec.Replicas + incrementValue
 	}
 
+	rcc.RevertAnyStorageUpsizeBeyondUpsizeAction(dcName, rackName, dcRackName, dcRackStatus, statefulSet)
+
 	if dcRackStatus.CassandraLastAction.Name == api.ActionRollingRestart.Name &&
 		dcRackStatus.CassandraLastAction.Status == api.StatusToDo {
 		statefulSet.Spec.Template.SetLabels(k8s.MergeLabels(statefulSet.Spec.Template.GetLabels(), map[string]string{
@@ -333,8 +322,4 @@ func getStoredSeedList(storedStatefulSet *appsv1.StatefulSet) []string {
 		}
 	}
 	return []string{}
-}
-
-func isStatefulSetNotReady(storedStatefulSet *appsv1.StatefulSet) bool {
-	return storedStatefulSet.Status.ReadyReplicas != *storedStatefulSet.Spec.Replicas
 }

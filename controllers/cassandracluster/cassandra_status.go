@@ -17,13 +17,16 @@ package cassandracluster
 import (
 	"context"
 	"fmt"
-	"github.com/r3labs/diff"
 	"reflect"
 	"strconv"
 	"time"
 
 	api "github.com/cscetbon/casskop/api/v2"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/cassandrapod"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/consts"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/pkg/k8s"
+	"github.com/r3labs/diff"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -121,6 +124,11 @@ func (rcc *CassandraClusterReconciler) getNextCassandraClusterStatus(ctx context
 
 		// Update Status if ConfigMap Has Changed
 		if UpdateStatusIfDockerImageHasChanged(cc, dcRackName, storedStatefulSet, status) {
+			return nil
+		}
+
+		rcc.storedStatefulSet = storedStatefulSet
+		if rcc.UpdateStatusIfStorageUpsize(dcName, rackName, dcRackName, status) {
 			return nil
 		}
 
@@ -239,7 +247,7 @@ func UpdateStatusIfDockerImageHasChanged(cc *api.CassandraCluster, dcRackName st
 	//This needs to be refactor if we load more than 1 container
 	if storedStatefulSet.Spec.Template.Spec.Containers != nil {
 		for _, container := range storedStatefulSet.Spec.Template.Spec.Containers {
-			if container.Name == cassandraContainerName && desiredDockerImage != container.Image {
+			if container.Name == consts.CassandraContainerName && desiredDockerImage != container.Image {
 				{
 					logrus.Infof("[%s][%s]: We ask to change DockerImage CRD:%s -> StatefulSet:%s", cc.Name, dcRackName, desiredDockerImage, storedStatefulSet.Spec.Template.Spec.Containers[0].Image)
 					lastAction := &status.CassandraRackStatus[dcRackName].CassandraLastAction
@@ -385,7 +393,7 @@ func (rcc *CassandraClusterReconciler) UpdateStatusIfActionEnded(ctx context.Con
 				pod := podsList.Items[nodesPerRacks-1]
 
 				//We need lastPod to be running to consider ScaleUp ended
-				if cassandraPodIsReady(&pod) {
+				if cassandrapod.IsReady(&pod) {
 					if hasJoiningNodes, err := rcc.hasJoiningNodes(ctx, cc); err != nil {
 						return false
 					} else if hasJoiningNodes {
@@ -429,6 +437,10 @@ func (rcc *CassandraClusterReconciler) UpdateStatusIfActionEnded(ctx context.Con
 			//nothing particular here
 			return false
 
+		case api.ActionStorageUpsize.Name:
+			//nothing particular here
+			return false
+
 		default:
 			// Do the update has finished on all pods ?
 			if storedStatefulSet.Status.CurrentRevision == storedStatefulSet.Status.UpdateRevision {
@@ -469,7 +481,7 @@ func (rcc *CassandraClusterReconciler) UpdateCassandraRackStatusPhase(ctx contex
 
 		ClusterPhaseMetric.set(api.ClusterPhaseInitial, cc.Name)
 
-		if isStatefulSetNotReady(storedStatefulSet) {
+		if sts.IsStatefulSetNotReady(storedStatefulSet) {
 			logrus.WithFields(logrusFields).Infof("Initializing StatefulSet: Replicas count is not okay")
 			return
 		}
@@ -482,7 +494,7 @@ func (rcc *CassandraClusterReconciler) UpdateCassandraRackStatusPhase(ctx contex
 			logrus.WithFields(logrusFields).Infof("StatefulSet is scaling up")
 		}
 		pod := podsList.Items[nodesPerRacks-1]
-		if cassandraPodIsReady(&pod) {
+		if cassandrapod.IsReady(&pod) {
 			status.CassandraRackStatus[dcRackName].Phase = api.ClusterPhaseRunning.Name
 			ClusterPhaseMetric.set(api.ClusterPhaseRunning, cc.Name)
 			now := metav1.Now()
@@ -493,7 +505,7 @@ func (rcc *CassandraClusterReconciler) UpdateCassandraRackStatusPhase(ctx contex
 	}
 
 	//No more in Initializing state
-	if isStatefulSetNotReady(storedStatefulSet) {
+	if sts.IsStatefulSetNotReady(storedStatefulSet) {
 		logrus.WithFields(logrusFields).Infof("StatefulSet: Replicas count is not okay")
 		status.CassandraRackStatus[dcRackName].Phase = api.ClusterPhasePending.Name
 		ClusterPhaseMetric.set(api.ClusterPhasePending, cc.Name)

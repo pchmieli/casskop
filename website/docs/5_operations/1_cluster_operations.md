@@ -878,6 +878,26 @@ The UpdateSeedList is done automatically by CassKop when the parameter
 
 See [ScaleUp](#scaleup) and [ScaleDown](#updatescaledown).
 
+### StorageUpsize
+
+- Scope: Only the `data` PersistentVolumeClaim can be resized
+- Direction: Storage upsize only; downsize operations are not supported
+- Storage Class: The storage class cannot be changed
+- Prerequisites: The underlying storage class must support volume expansion (allowVolumeExpansion: true)
+- Operation Mode: Live resizing without pod restarts (requires CSI driver support for online expansion)
+- Tested Platforms: Validated on Azure Kubernetes Service (AKS) and Google Kubernetes Engine (GKE)
+
+Execution Strategy:
+- Storage resize is performed rack by rack to maintain cluster stability
+- All pods within a single rack are resized concurrently
+- The operation proceeds to the next rack only after the current rack completes successfully
+
+Operation Isolation:
+- Storage upsize operations are executed independently from other cluster operations
+- During an active storage resize, no other configuration changes are applied
+- However, such changes are not reverted from CR and will be processed after the resize completes
+- Conversely, when other operations are in progress, storage resize requests are queued until completion
+
 ### CorrectCRDConfig
 
 The CRD `CassandraCluster` is used to define your cluster configuration. Some fields can't be updated in a kubernetes
