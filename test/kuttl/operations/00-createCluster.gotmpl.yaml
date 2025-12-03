@@ -24,6 +24,31 @@ data:
   pre_run.sh: |-
     echo example1
 ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cassandra-allow-all-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: cassandracluster
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8778
+        - protocol: TCP
+          port: 9042
+        - protocol: TCP
+          port: 7199
+        - protocol: TCP
+          port: 7000  # Internode
+        - protocol: TCP
+          port: 7001  # Internode SSL
+---
 apiVersion: db.orange.com/v2
 kind: CassandraCluster
 metadata:
