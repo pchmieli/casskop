@@ -18,16 +18,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	gozap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"os"
 	"path"
 	"runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"strconv"
 	"strings"
 	"time"
+
+	gozap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -158,27 +158,27 @@ func main() {
 
 	printVersion()
 
-	namespace, err := getWatchNamespace()
-	if err != nil {
-		setupLog.Error(err, "unable to get WatchNamespace, "+
-			"the manager will watch and manage resources in all namespaces")
-	}
+	//namespace, err := getWatchNamespace()
+	//if err != nil {
+	//	setupLog.Error(err, "unable to get WatchNamespace, "+
+	//		"the manager will watch and manage resources in all namespaces")
+	//}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	ctx := context.TODO()
 
 	// Become the leader before proceeding
-	err = leader.Become(ctx, "casskop-lock")
+	err := leader.Become(ctx, "casskop-lock")
 	if err != nil {
 		logrus.Error(err)
 		os.Exit(1)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                server.Options{BindAddress: metricsAddr},
-		Cache:                  cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
+		Scheme:  scheme,
+		Metrics: server.Options{BindAddress: metricsAddr},
+		//Cache:                  cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
 		HealthProbeBindAddress: probeAddr,
 	})
 	if err != nil {
