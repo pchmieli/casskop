@@ -208,7 +208,7 @@ func IsMarkedForDeletion(m metav1.ObjectMeta) bool {
 
 // PodHostname returns hostname of a pod
 func PodHostname(pod v1.Pod) string {
-	return fmt.Sprintf("%s.%s", pod.Spec.Hostname, pod.Spec.Subdomain)
+	return fmt.Sprintf("%s.%s.%s", pod.Spec.Hostname, pod.Spec.Subdomain, pod.Namespace)
 }
 
 func PodByName(podList *v1.PodList, podName string) *v1.Pod {
