@@ -9,7 +9,7 @@ import (
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func ShouldBeStarted(rack view.RackView, requestedCapacity string) bool {
@@ -84,9 +84,9 @@ func RevertAnyStorageUpsizeBeyondUpsizeAction(rack view.RackView, newStatefulSet
 		index, requested := findDataCapacity(newStatefulSet.Spec.VolumeClaimTemplates)
 		if !requested.Equal(current) {
 			if newStatefulSet.Spec.VolumeClaimTemplates[index].Spec.Resources.Requests == nil {
-				newStatefulSet.Spec.VolumeClaimTemplates[index].Spec.Resources.Requests = v1.ResourceList{}
+				newStatefulSet.Spec.VolumeClaimTemplates[index].Spec.Resources.Requests = corev1.ResourceList{}
 			}
-			newStatefulSet.Spec.VolumeClaimTemplates[index].Spec.Resources.Requests[v1.ResourceStorage] = current
+			newStatefulSet.Spec.VolumeClaimTemplates[index].Spec.Resources.Requests[corev1.ResourceStorage] = current
 			rack.Log().
 				Infof("Storage Resize request detected, postponing resize from %s to %s until other actions are done",
 					requested.String(), current.String())
