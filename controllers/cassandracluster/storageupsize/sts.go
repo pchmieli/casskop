@@ -103,7 +103,7 @@ func removeStatefulSetOrphan(ctx context.Context, cc *api.CassandraCluster, rack
 		return actionstep.Pass()
 	}
 
-	if doesStatefulSetHasNewCapacity(cc, rack.StoredStatefulSet()) {
+	if doesStatefulSetHaveNewCapacity(cc, rack.StoredStatefulSet()) {
 		return actionstep.Pass()
 	}
 
@@ -116,7 +116,7 @@ func removeStatefulSetOrphan(ctx context.Context, cc *api.CassandraCluster, rack
 	return actionstep.Break()
 }
 
-func doesStatefulSetHasNewCapacity(cc *api.CassandraCluster, storedStatefulSet *appsv1.StatefulSet) bool {
+func doesStatefulSetHaveNewCapacity(cc *api.CassandraCluster, storedStatefulSet *appsv1.StatefulSet) bool {
 	requested := silentParseResourceQuantity(cc.Spec.DataCapacity)
 	_, current := findDataCapacity(storedStatefulSet.Spec.VolumeClaimTemplates)
 	return requested.Equal(current)
@@ -152,7 +152,7 @@ func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView,
 func waitTillStatefulSetAndAllPodsAreReady(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
 	podsClient pods.PodsClient) actionstep.StepResult {
 
-	if !doesStatefulSetHasNewCapacity(cc, rack.StoredStatefulSet()) {
+	if !doesStatefulSetHaveNewCapacity(cc, rack.StoredStatefulSet()) {
 		rack.Log().Infof("Resize action is in progress, statefulset need to be re-created with new capacity")
 		return actionstep.Break()
 	}
