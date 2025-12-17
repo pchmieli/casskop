@@ -543,15 +543,14 @@ func (rcc *CassandraClusterReconciler) ReconcileRack(ctx context.Context, cc *ap
 			}
 
 			if rcc.IsStorageUpsizeStarted(dcRackStatus) {
-				if getStsErr != nil {
-					if apierrors.IsNotFound(getStsErr) {
-						rcc.storedStatefulSet = nil
-					} else {
-						logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dc-rack": dcRackName}).
-							Infof("cannot continue storage upsize because: failed to get cassandra's statefulset (%s) %v",
-								Name, err)
-						return nil
-					}
+				if getStsErr != nil && !apierrors.IsNotFound(getStsErr) {
+					logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dc-rack": dcRackName}).
+						Infof("cannot continue storage upsize because: failed to get cassandra's statefulset (%s) %v",
+							Name, err)
+					return nil
+				}
+				if getStsErr != nil && apierrors.IsNotFound(getStsErr) {
+					rcc.storedStatefulSet = nil
 				} else {
 					rcc.storedStatefulSet = storedStatefulSet
 				}
