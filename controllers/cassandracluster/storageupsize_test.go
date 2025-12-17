@@ -182,7 +182,7 @@ func assertClusterInitialized(assert *assert.Assertions, rcc *CassandraClusterRe
 }
 
 func assertUpsizeInProgress(assert *assert.Assertions, rcc *CassandraClusterReconciler, dcRackName string) {
-	assert.NotEmpty(rcc.cc.Status.CassandraRackStatus[dcRackName].StatefulSetDumpBeforeStorageResize)
+	assert.NotEmpty(rcc.cc.Status.CassandraRackStatus[dcRackName].StatefulSetSnapshotBeforeStorageResize)
 
 	assertClusterStatusPhase(assert, rcc, api.ClusterPhasePending)
 	assertClusterStatusLastAction(assert, rcc, api.ActionStorageUpsize, api.StatusOngoing)

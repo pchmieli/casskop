@@ -125,22 +125,22 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 		assert.False(t, result.ShouldBreakReconcileLoop())
 	})
 
-	t.Run("statefulSet dump not exist - error", func(t *testing.T) {
+	t.Run("statefulSet snapshot not exist - error", func(t *testing.T) {
 		rack := stub.RackView{
 			RackStatusStub: &v2.CassandraRackStatus{
-				StatefulSetDumpBeforeStorageResize: "",
+				StatefulSetSnapshotBeforeStorageResize: "",
 			},
 		}
 
 		result := recreateStatefulSetWithNewCapacity(testCtx, rack, increaseCapacityTo15Gi, nil)
 
 		assert.True(t, result.HasError())
-		assert.Contains(t, result.Error().Error(), "cannot unmarshall dumped statefulSet for storage upsize")
+		assert.Contains(t, result.Error().Error(), "cannot unmarshall snapshotted statefulSet for storage upsize")
 		assert.True(t, result.ShouldBreakReconcileLoop())
 	})
 
 	t.Run("cannot find data PVC - error", func(t *testing.T) {
-		stsDump := string(toJson(t, &appsv1.StatefulSet{
+		stsSnapshot := string(toJson(t, &appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1", Namespace: "default"},
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
@@ -150,7 +150,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 		}))
 		rack := stub.RackView{
 			RackStatusStub: &v2.CassandraRackStatus{
-				StatefulSetDumpBeforeStorageResize: stsDump,
+				StatefulSetSnapshotBeforeStorageResize: stsSnapshot,
 			},
 		}
 
@@ -162,7 +162,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 	})
 
 	t.Run("statefulSet created successfully - break loop, sts should be created with proper capacity", func(t *testing.T) {
-		stsDump := string(toJson(t, &appsv1.StatefulSet{
+		stsSnapshot := string(toJson(t, &appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1", Namespace: "default"},
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
@@ -172,7 +172,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 		}))
 		rack := stub.RackView{
 			RackStatusStub: &v2.CassandraRackStatus{
-				StatefulSetDumpBeforeStorageResize: stsDump,
+				StatefulSetSnapshotBeforeStorageResize: stsSnapshot,
 			},
 		}
 		cl := fake.NewClientBuilder().Build()
@@ -189,7 +189,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 	})
 
 	t.Run("statefulSet creation fails - error", func(t *testing.T) {
-		stsDump := string(toJson(t, &appsv1.StatefulSet{
+		stsSnapshot := string(toJson(t, &appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1", Namespace: "default"},
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
@@ -199,7 +199,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 		}))
 		rack := stub.RackView{
 			RackStatusStub: &v2.CassandraRackStatus{
-				StatefulSetDumpBeforeStorageResize: stsDump,
+				StatefulSetSnapshotBeforeStorageResize: stsSnapshot,
 			},
 		}
 		cl := interceptor.NewClient(fake.NewClientBuilder().Build(), interceptor.Funcs{

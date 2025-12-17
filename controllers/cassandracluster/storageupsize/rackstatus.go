@@ -12,33 +12,33 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func isStatefulSetDumpedAlready(dcRackStatus *api.CassandraRackStatus) bool {
-	return dcRackStatus.StatefulSetDumpBeforeStorageResize != ""
+func isStatefulSetSnapshottedAlready(dcRackStatus *api.CassandraRackStatus) bool {
+	return dcRackStatus.StatefulSetSnapshotBeforeStorageResize != ""
 }
 
-func dumpOldStatefulSet(rack view.RackView) actionstep.StepResult {
-	if isStatefulSetDumpedAlready(rack.RackStatus()) {
+func makeOldStatefulSetSnapshot(rack view.RackView) actionstep.StepResult {
+	if isStatefulSetSnapshottedAlready(rack.RackStatus()) {
 		return actionstep.Pass()
 	}
 
 	storedStatefulSet := rack.StoredStatefulSet()
 	if storedStatefulSet == nil {
-		return actionstep.Error(errors.New("StatefulSet dump not exist and StatefulSet itself is not found, cannot proceed with storage upsize"))
+		return actionstep.Error(errors.New("StatefulSet snapshot not exist and StatefulSet itself is not found, cannot proceed with storage upsize"))
 	}
-	statefulSetDumpJson, err := prepareStatefulSetDump(storedStatefulSet)
+	statefulSetSnapshotJson, err := prepareStatefulSetSnapshot(storedStatefulSet)
 	if err != nil {
 		return actionstep.Error(err)
 	}
-	rack.RackStatus().StatefulSetDumpBeforeStorageResize = statefulSetDumpJson
+	rack.RackStatus().StatefulSetSnapshotBeforeStorageResize = statefulSetSnapshotJson
 	return actionstep.Break()
 }
 
-func unmarshallDumpedStatefulSet(rack view.RackView) (*appsv1.StatefulSet, error) {
-	marshalledStatefulSet := rack.RackStatus().StatefulSetDumpBeforeStorageResize
+func unmarshallSnapshottedStatefulSet(rack view.RackView) (*appsv1.StatefulSet, error) {
+	marshalledStatefulSet := rack.RackStatus().StatefulSetSnapshotBeforeStorageResize
 	newStatefulSet := &appsv1.StatefulSet{}
 	err := json.Unmarshal([]byte(marshalledStatefulSet), newStatefulSet)
 	if err != nil {
-		return nil, errors.New("cannot unmarshall dumped statefulSet for storage upsize: " + err.Error())
+		return nil, errors.New("cannot unmarshall snapshotted statefulSet for storage upsize: " + err.Error())
 	}
 	return newStatefulSet, nil
 }
@@ -57,5 +57,5 @@ func finalizeUpsizeAction(rackStatus *api.CassandraRackStatus) {
 	lastAction.Status = api.StatusDone
 	lastAction.Name = api.ActionStorageUpsize.Name
 	lastAction.EndTime = ptr.To(metav1.Now())
-	rackStatus.StatefulSetDumpBeforeStorageResize = ""
+	rackStatus.StatefulSetSnapshotBeforeStorageResize = ""
 }

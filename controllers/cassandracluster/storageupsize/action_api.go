@@ -35,7 +35,7 @@ func Reconcile(ctx context.Context, cc *api.CassandraCluster, rack view.RackView
 	setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error,
 	storageStateClient storagestateclient.StorageStateClient, stsClient sts.StsClient, podsClient pods.PodsClient) error {
 
-	if stepResult := dumpOldStatefulSet(rack); stepResult.HasError() {
+	if stepResult := makeOldStatefulSetSnapshot(rack); stepResult.HasError() {
 		return stepResult.Error()
 	} else if stepResult.ShouldBreakReconcileLoop() {
 		return nil

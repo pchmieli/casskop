@@ -2308,7 +2308,7 @@ spec:
                             format: date-time
                           status:
                             type: string
-                      statefulSetDumpBeforeStorageResize:
+                      statefulSetSnapshotBeforeStorageResize:
                         type: string
                 lastClusterAction:
                   description: Store last action at cluster level

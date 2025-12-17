@@ -946,7 +946,7 @@ type CassandraRackStatus struct {
 	// PodLastOperation manage status for Pod Operation (nodetool cleanup, upgradesstables..)
 	PodLastOperation PodLastOperation `json:"podLastOperation,omitempty"`
 
-	StatefulSetDumpBeforeStorageResize string `json:"statefulSetDumpBeforeStorageResize,omitempty"`
+	StatefulSetSnapshotBeforeStorageResize string `json:"statefulSetSnapshotBeforeStorageResize,omitempty"`
 }
 
 // CassandraClusterStatus defines Global state of CassandraCluster

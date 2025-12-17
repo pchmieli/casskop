@@ -20,27 +20,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func prepareStatefulSetDump(storedStatefulSet *appsv1.StatefulSet) (string, error) {
-	statefulSetDump := storedStatefulSet.DeepCopy()
+func prepareStatefulSetSnapshot(storedStatefulSet *appsv1.StatefulSet) (string, error) {
+	statefulSetSnapshot := storedStatefulSet.DeepCopy()
 
-	statefulSetDump.GenerateName = ""
-	statefulSetDump.SelfLink = ""
-	statefulSetDump.UID = ""
-	statefulSetDump.ResourceVersion = ""
-	statefulSetDump.Generation = 0
-	statefulSetDump.CreationTimestamp = metav1.Time{}
-	statefulSetDump.DeletionTimestamp = nil
-	statefulSetDump.DeletionGracePeriodSeconds = nil
-	statefulSetDump.ManagedFields = nil
+	statefulSetSnapshot.GenerateName = ""
+	statefulSetSnapshot.SelfLink = ""
+	statefulSetSnapshot.UID = ""
+	statefulSetSnapshot.ResourceVersion = ""
+	statefulSetSnapshot.Generation = 0
+	statefulSetSnapshot.CreationTimestamp = metav1.Time{}
+	statefulSetSnapshot.DeletionTimestamp = nil
+	statefulSetSnapshot.DeletionGracePeriodSeconds = nil
+	statefulSetSnapshot.ManagedFields = nil
 
-	statefulSetDump.TypeMeta = metav1.TypeMeta{}
-	statefulSetDump.Status = appsv1.StatefulSetStatus{}
+	statefulSetSnapshot.TypeMeta = metav1.TypeMeta{}
+	statefulSetSnapshot.Status = appsv1.StatefulSetStatus{}
 
-	statefulSetDumpJson, err := json.ConfigCompatibleWithStandardLibrary.Marshal(statefulSetDump)
+	statefulSetSnapshotJson, err := json.ConfigCompatibleWithStandardLibrary.Marshal(statefulSetSnapshot)
 	if err != nil {
 		return "", err
 	}
-	return string(statefulSetDumpJson), nil
+	return string(statefulSetSnapshotJson), nil
 }
 
 func applyPVCModification(newStatefulSet *appsv1.StatefulSet, setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error) error {
@@ -131,7 +131,7 @@ func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView,
 
 	rack.Log().Info("Creating StatefulSet with new capacity")
 
-	newStatefulSet, err := unmarshallDumpedStatefulSet(rack)
+	newStatefulSet, err := unmarshallSnapshottedStatefulSet(rack)
 	if err != nil {
 		return actionstep.Error(err)
 	}
