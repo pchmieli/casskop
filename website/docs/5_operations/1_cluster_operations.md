@@ -11,7 +11,7 @@ Cluster Operations must only be triggered by a change made on the `CassandraClus
 
 Some updates in the `CassandraCluster` CRD object are forbidden and will be gently dismissed by CassKop:
 
-- `spec.dataCapacity`
+- `spec.dataCapacity` (volume shrinking is forbidden, but we support online volume expansion, see section StorageUpsize)
 - `spec.dataStorage`
 
 Some Updates in the `CassandraCluster` CRD object will trigger a rolling update of the whole cluster such as :
