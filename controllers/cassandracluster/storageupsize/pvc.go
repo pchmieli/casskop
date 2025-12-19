@@ -48,13 +48,13 @@ func fetchDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.Rack
 func getAllDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
 	storageStateClient storagestateclient.StorageStateClient) ([]corev1.PersistentVolumeClaim, error) {
 
-	if rack.StoredStatefulSet() == nil {
+	if rack.LivingStatefulSet() == nil {
 		return nil, errors.New(fmt.Sprintf("[%s]: cannot fetch PVC list for storage upsize because"+
-			"StoredStatefulSet is nil for DC-Rack %s "+
+			"livingStatefulSet is nil for DC-Rack %s "+
 			"(should not see this message, PVC should not be listed before statefulSet is recreated with new capacity)",
 			cc.Name, rack.DcRackName()))
 	}
-	statefulSetName := rack.StoredStatefulSet().Name
+	statefulSetName := rack.LivingStatefulSet().Name
 
 	pvcs, err := storageStateClient.ListPVC(ctx, cc.Namespace, rack.GetLabelsForCassandraDCRack(cc))
 	if err != nil {
@@ -68,7 +68,7 @@ func getAllDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.Rac
 		}
 	}
 
-	expectedNodesPerRacks := *rack.StoredStatefulSet().Spec.Replicas
+	expectedNodesPerRacks := *rack.LivingStatefulSet().Spec.Replicas
 
 	if len(dataPVCs) != int(expectedNodesPerRacks) {
 		errMsg := fmt.Sprintf("[%s]: Number of Data PVCs (%d) different than expected Replicas (%d) for DC-Rack %s",

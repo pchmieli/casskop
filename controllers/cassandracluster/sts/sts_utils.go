@@ -2,10 +2,10 @@ package sts
 
 import appsv1 "k8s.io/api/apps/v1"
 
-func IsStatefulSetNotReady(storedStatefulSet *appsv1.StatefulSet) bool {
-	return !IsStatefulSetReady(storedStatefulSet)
+func IsStatefulSetNotReady(statefulSet *appsv1.StatefulSet) bool {
+	return !IsStatefulSetReady(statefulSet)
 }
 
-func IsStatefulSetReady(storedStatefulSet *appsv1.StatefulSet) bool {
-	return storedStatefulSet.Status.ReadyReplicas == *storedStatefulSet.Spec.Replicas
+func IsStatefulSetReady(statefulSet *appsv1.StatefulSet) bool {
+	return statefulSet.Status.ReadyReplicas == *statefulSet.Spec.Replicas
 }

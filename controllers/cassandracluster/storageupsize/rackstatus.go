@@ -21,11 +21,11 @@ func makeOldStatefulSetSnapshot(rack view.RackView) actionstep.StepResult {
 		return actionstep.Pass()
 	}
 
-	storedStatefulSet := rack.StoredStatefulSet()
-	if storedStatefulSet == nil {
+	livingStatefulSet := rack.LivingStatefulSet()
+	if livingStatefulSet == nil {
 		return actionstep.Error(errors.New("StatefulSet snapshot not exist and StatefulSet itself is not found, cannot proceed with storage upsize"))
 	}
-	statefulSetSnapshotJson, err := prepareStatefulSetSnapshot(storedStatefulSet)
+	statefulSetSnapshotJson, err := prepareStatefulSetSnapshot(livingStatefulSet)
 	if err != nil {
 		return actionstep.Error(err)
 	}

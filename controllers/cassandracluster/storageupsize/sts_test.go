@@ -113,7 +113,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 
 	t.Run("statefulSet already exists - no op", func(t *testing.T) {
 		rack := stub.RackView{
-			StoredStatefulSetStub: &appsv1.StatefulSet{},
+			LivingStatefulSetStub: &appsv1.StatefulSet{},
 		}
 
 		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), nil)

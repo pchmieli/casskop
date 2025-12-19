@@ -16,7 +16,7 @@ import (
 
 func ShouldBeStarted(rack view.RackView, requestedCapacity string) bool {
 	requested := silentParseResourceQuantity(requestedCapacity)
-	_, current := findDataCapacity(rack.StoredStatefulSet().Spec.VolumeClaimTemplates)
+	_, current := findDataCapacity(rack.LivingStatefulSet().Spec.VolumeClaimTemplates)
 	if !requested.Equal(current) {
 		rack.Log().Infof("Storage upsize should be started: ask %v and have %v", requested, current)
 		return true
@@ -68,7 +68,7 @@ func Reconcile(ctx context.Context, cc *api.CassandraCluster, rack view.RackView
 // current action should finish, then upsize action should be started and then these changes should be applied
 func RevertAnyStorageUpsizeBeyondUpsizeAction(rack view.RackView, newStatefulSet *appsv1.StatefulSet) {
 	if !IsStarted(rack.RackStatus()) {
-		_, current := findDataCapacity(rack.StoredStatefulSet().Spec.VolumeClaimTemplates)
+		_, current := findDataCapacity(rack.LivingStatefulSet().Spec.VolumeClaimTemplates)
 		index, requested := findDataCapacity(newStatefulSet.Spec.VolumeClaimTemplates)
 		if !requested.Equal(current) {
 			if newStatefulSet.Spec.VolumeClaimTemplates[index].Spec.Resources.Requests == nil {

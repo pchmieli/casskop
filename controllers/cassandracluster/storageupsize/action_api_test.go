@@ -25,7 +25,7 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 			pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
-			StoredStatefulSetStub: currentSts.DeepCopy(),
+			LivingStatefulSetStub: currentSts.DeepCopy(),
 			RackStatusStub: &v2.CassandraRackStatus{
 				CassandraLastAction: v2.CassandraLastAction{
 					Name:   v2.ActionStorageUpsize.Name,
@@ -49,7 +49,7 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 			pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
-			StoredStatefulSetStub: currentSts.DeepCopy(),
+			LivingStatefulSetStub: currentSts.DeepCopy(),
 			RackStatusStub: &v2.CassandraRackStatus{
 				CassandraLastAction: v2.CassandraLastAction{
 					Name:   v2.ActionStorageUpsize.Name,
@@ -73,7 +73,7 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 			pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 		rack := stub.RackView{
-			StoredStatefulSetStub: currentSts.DeepCopy(),
+			LivingStatefulSetStub: currentSts.DeepCopy(),
 			RackStatusStub: &v2.CassandraRackStatus{
 				Phase: v2.ClusterPhaseRunning.Name,
 			},
@@ -94,7 +94,7 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 			pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
-			StoredStatefulSetStub: currentSts.DeepCopy(),
+			LivingStatefulSetStub: currentSts.DeepCopy(),
 			RackStatusStub: &v2.CassandraRackStatus{
 				CassandraLastAction: v2.CassandraLastAction{
 					Name:   v2.ActionScaleUp.Name,
@@ -118,7 +118,7 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 			pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
-			StoredStatefulSetStub: currentSts.DeepCopy(),
+			LivingStatefulSetStub: currentSts.DeepCopy(),
 			RackStatusStub: &v2.CassandraRackStatus{
 				CassandraLastAction: v2.CassandraLastAction{
 					Name:   v2.ActionStorageUpsize.Name,

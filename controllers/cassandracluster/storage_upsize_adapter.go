@@ -99,11 +99,11 @@ func (v *rccRackView) RackStatus() *api.CassandraRackStatus {
 	return v.dcRackStatus
 }
 
-func (v *rccRackView) StoredStatefulSet() *appsv1.StatefulSet {
+func (v *rccRackView) LivingStatefulSet() *appsv1.StatefulSet {
 	return v.rcc.storedStatefulSet
 }
 
-func (v *rccRackView) StoredStatefulSetExists() bool {
+func (v *rccRackView) IsStatefulSetAliveNow() bool {
 	return v.rcc.storedStatefulSet != nil
 }
 

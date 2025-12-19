@@ -19,8 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func prepareStatefulSetSnapshot(storedStatefulSet *appsv1.StatefulSet) (string, error) {
-	statefulSetSnapshot := storedStatefulSet.DeepCopy()
+func prepareStatefulSetSnapshot(livingStatefulSet *appsv1.StatefulSet) (string, error) {
+	statefulSetSnapshot := livingStatefulSet.DeepCopy()
 
 	statefulSetSnapshot.GenerateName = ""
 	statefulSetSnapshot.SelfLink = ""
@@ -64,9 +64,10 @@ func applyPVCModification(newStatefulSet *appsv1.StatefulSet, newDataCapacity re
 //     but in the second, at the end of the resize,
 //     a StatefulSet with a smaller number of replicas will be applied immediately, without calling decommission
 //
-// 3. Why do we need to manually handle last-applied annotation on the storedStatefulSet?
+// 3. Why do we need to manually handle last-applied annotation on the newStatefulSet?
 //   - Banzai stores the original object in annotations and performs a 3-way merge on update
-//   - storedStatefulSet is an object fetched from k8s API, so it contains Kubernetes defaults (added by the k8s API server)
+//   - livingStatefulSet is an object fetched from k8s API, so it contains Kubernetes defaults (added by the k8s API server)
+//   - newStatefulSet is livingStatefulSet after marshal+unmarshal
 //   - if we simply did
 //     `patch.DefaultAnnotator.SetLastAppliedAnnotation(newStatefulSet)`
 //     we would put into the annotations an object with Kubernetes defaults (added by the k8s API server)
@@ -97,16 +98,16 @@ func enrichWithCleanLastAppliedAnnotation(newStatefulSet *appsv1.StatefulSet, ne
 }
 
 func removeStatefulSetOrphan(ctx context.Context, cc *api.CassandraCluster, rack view.RackView, stsClient sts.StsClient) actionstep.StepResult {
-	if !rack.StoredStatefulSetExists() {
+	if !rack.IsStatefulSetAliveNow() {
 		return actionstep.Pass()
 	}
 
-	if doesStatefulSetHaveNewCapacity(cc, rack.StoredStatefulSet()) {
+	if doesStatefulSetHaveNewCapacity(cc, rack.LivingStatefulSet()) {
 		return actionstep.Pass()
 	}
 
 	rack.Log().Info("Deleting StatefulSet with orphan option")
-	err := stsClient.DeleteStatefulSetWithOrphanOption(ctx, cc.Namespace, rack.StoredStatefulSet().Name)
+	err := stsClient.DeleteStatefulSetWithOrphanOption(ctx, cc.Namespace, rack.LivingStatefulSet().Name)
 	if err != nil {
 		return actionstep.Error(err)
 	}
@@ -114,16 +115,16 @@ func removeStatefulSetOrphan(ctx context.Context, cc *api.CassandraCluster, rack
 	return actionstep.Break()
 }
 
-func doesStatefulSetHaveNewCapacity(cc *api.CassandraCluster, storedStatefulSet *appsv1.StatefulSet) bool {
+func doesStatefulSetHaveNewCapacity(cc *api.CassandraCluster, livingStatefulSet *appsv1.StatefulSet) bool {
 	requested := silentParseResourceQuantity(cc.Spec.DataCapacity)
-	_, current := findDataCapacity(storedStatefulSet.Spec.VolumeClaimTemplates)
+	_, current := findDataCapacity(livingStatefulSet.Spec.VolumeClaimTemplates)
 	return requested.Equal(current)
 }
 
 func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView, newDataCapacity resource.Quantity,
 	stsClient sts.StsClient) actionstep.StepResult {
 
-	if rack.StoredStatefulSetExists() {
+	if rack.IsStatefulSetAliveNow() {
 		return actionstep.Pass()
 	}
 
@@ -150,17 +151,17 @@ func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView,
 func waitTillStatefulSetAndAllPodsAreReady(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
 	podsClient pods.PodsClient) actionstep.StepResult {
 
-	if !doesStatefulSetHaveNewCapacity(cc, rack.StoredStatefulSet()) {
+	if !doesStatefulSetHaveNewCapacity(cc, rack.LivingStatefulSet()) {
 		rack.Log().Infof("Resize action is in progress, statefulset need to be re-created with new capacity")
 		return actionstep.Break()
 	}
 
-	if sts.IsStatefulSetReady(rack.StoredStatefulSet()) {
+	if sts.IsStatefulSetReady(rack.LivingStatefulSet()) {
 		podList, err := podsClient.ListPods(ctx, cc.Namespace, rack.GetLabelsForCassandraDCRack(cc))
 		if err != nil {
 			return actionstep.Error(err)
 		}
-		expectedNodesPerRacks := *rack.StoredStatefulSet().Spec.Replicas
+		expectedNodesPerRacks := *rack.LivingStatefulSet().Spec.Replicas
 		if len(podList.Items) != int(expectedNodesPerRacks) {
 			errMsg := fmt.Sprintf("Number of pods (%d) different than expected Replicas (%d) for DC-Rack %s",
 				len(podList.Items), expectedNodesPerRacks, rack.DcRackName())

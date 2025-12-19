@@ -12,7 +12,7 @@ type RackView struct {
 	ClusterNameStub       string
 	CompleteRackNameStub  api.CompleteRackName
 	RackStatusStub        *api.CassandraRackStatus
-	StoredStatefulSetStub *appsv1.StatefulSet
+	LivingStatefulSetStub *appsv1.StatefulSet
 }
 
 var _ view.RackView = RackView{}
@@ -37,12 +37,12 @@ func (v RackView) RackStatus() *api.CassandraRackStatus {
 	return v.RackStatusStub
 }
 
-func (v RackView) StoredStatefulSet() *appsv1.StatefulSet {
-	return v.StoredStatefulSetStub
+func (v RackView) LivingStatefulSet() *appsv1.StatefulSet {
+	return v.LivingStatefulSetStub
 }
 
-func (v RackView) StoredStatefulSetExists() bool {
-	return v.StoredStatefulSetStub != nil
+func (v RackView) IsStatefulSetAliveNow() bool {
+	return v.LivingStatefulSetStub != nil
 }
 
 func (v RackView) GetLabelsForCassandraDCRack(cc *api.CassandraCluster) map[string]string {

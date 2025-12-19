@@ -12,8 +12,8 @@ type RackView interface {
 	RackName() api.RackName
 	DcRackName() api.DcRackName
 	RackStatus() *api.CassandraRackStatus
-	StoredStatefulSet() *appsv1.StatefulSet
-	StoredStatefulSetExists() bool
+	LivingStatefulSet() *appsv1.StatefulSet
+	IsStatefulSetAliveNow() bool
 	GetLabelsForCassandraDCRack(cc *api.CassandraCluster) map[string]string
 	Log() *logrus.Entry
 }
