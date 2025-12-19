@@ -7,9 +7,7 @@ import (
 
 func IsReady(pod *v1.Pod) bool {
 	cassandraContainerStatus := getContainerStatus(pod)
-
-	if cassandraContainerStatus != nil && cassandraContainerStatus.Name == consts.CassandraContainerName &&
-		pod.Status.Phase == v1.PodRunning && cassandraContainerStatus.Ready {
+	if cassandraContainerStatus != nil && pod.Status.Phase == v1.PodRunning && cassandraContainerStatus.Ready {
 		return true
 	}
 	return false
