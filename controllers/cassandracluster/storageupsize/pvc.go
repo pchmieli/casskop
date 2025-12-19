@@ -48,11 +48,6 @@ func fetchDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.Rack
 func getAllDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
 	storageStateClient storagestateclient.StorageStateClient) ([]corev1.PersistentVolumeClaim, error) {
 
-	pvcs, err := storageStateClient.ListPVC(ctx, cc.Namespace, rack.GetLabelsForCassandraDCRack(cc))
-	if err != nil {
-		return nil, err
-	}
-
 	if rack.StoredStatefulSet() == nil {
 		return nil, errors.New(fmt.Sprintf("[%s]: cannot fetch PVC list for storage upsize because"+
 			"StoredStatefulSet is nil for DC-Rack %s "+
@@ -60,6 +55,11 @@ func getAllDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.Rac
 			cc.Name, rack.DcRackName()))
 	}
 	statefulSetName := rack.StoredStatefulSet().Name
+
+	pvcs, err := storageStateClient.ListPVC(ctx, cc.Namespace, rack.GetLabelsForCassandraDCRack(cc))
+	if err != nil {
+		return nil, err
+	}
 
 	dataPVCs := make([]corev1.PersistentVolumeClaim, 0)
 	for _, pvc := range pvcs.Items {
