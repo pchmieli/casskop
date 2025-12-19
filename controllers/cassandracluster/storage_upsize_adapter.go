@@ -24,18 +24,18 @@ func (rcc *CassandraClusterReconciler) UpdateStatusIfStorageUpsize(completeDcRac
 	status *api.CassandraClusterStatus) bool {
 
 	rackView := rcc.newRackView(completeDcRackName, status.GetCassandraRackStatus(completeDcRackName.DcRackName))
-	if rcc.ShouldStorageUpsizeBeStarted(rackView) {
-		rcc.StartStorageUpsize(rackView)
+	if rcc.shouldStorageUpsizeBeStarted(rackView) {
+		rcc.startStorageUpsize(rackView)
 		return true
 	}
 	return false
 }
 
-func (rcc *CassandraClusterReconciler) ShouldStorageUpsizeBeStarted(rackView view.RackView) bool {
+func (rcc *CassandraClusterReconciler) shouldStorageUpsizeBeStarted(rackView view.RackView) bool {
 	return storageupsize.ShouldBeStarted(rackView, rcc.cc.GetDataCapacityForDCName(rackView.DcName()))
 }
 
-func (rcc *CassandraClusterReconciler) StartStorageUpsize(rackView view.RackView) {
+func (rcc *CassandraClusterReconciler) startStorageUpsize(rackView view.RackView) {
 	storageupsize.Start(rackView)
 	ClusterPhaseMetric.set(api.ClusterPhasePending, rcc.cc.Name)
 	ClusterActionMetric.set(api.ActionStorageUpsize, rcc.cc.Name)
