@@ -6,6 +6,9 @@ This guide explains how to set up LVM (Logical Volume Manager) inside kind (Kube
 
 Online PVC expansion allows you to resize persistent volume claims without restarting pods. This is useful for testing applications that need to handle storage expansion dynamically.
 
+In casskop domain it is used to test the storage upsize feature.
+This feature requires online PVC expansion capability from the underlying storage provider which is available on all major cloud providers.
+
 ## Prerequisites
 
 - Docker installed and running
