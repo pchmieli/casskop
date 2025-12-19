@@ -946,6 +946,8 @@ type CassandraRackStatus struct {
 	// PodLastOperation manage status for Pod Operation (nodetool cleanup, upgradesstables..)
 	PodLastOperation PodLastOperation `json:"podLastOperation,omitempty"`
 
+	// StatefulSetSnapshotBeforeStorageResize is the StatefulSet snapshot taken before storage resize
+	// The purpose is to isolate the storage resize operation from other operations
 	StatefulSetSnapshotBeforeStorageResize string `json:"statefulSetSnapshotBeforeStorageResize,omitempty"`
 }
 
