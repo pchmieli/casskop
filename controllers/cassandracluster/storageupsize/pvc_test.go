@@ -34,7 +34,7 @@ func Test_ensureAllPVCsHaveNewCapacity_happyPath(t *testing.T) {
 			DataCapacity: expectedCapacity,
 		},
 	}
-	rackView := rackviewstub.RackView{DcNameStubStub: "dc"}
+	rackView := rackviewstub.RackView{CompleteRackNameStub: api.CompleteRackName{DcName: "dc"}}
 	fakeClientScheme := scheme.Scheme
 	fakeClientScheme.AddKnownTypes(api.GroupVersion, cc)
 	cl := fake.NewClientBuilder().
@@ -84,7 +84,7 @@ func Test_ensureAllPVCsHaveNewCapacity_errors(t *testing.T) {
 			DataCapacity: expectedCapacity,
 		},
 	}
-	rackView := rackviewstub.RackView{DcNameStubStub: "dc"}
+	rackView := rackviewstub.RackView{CompleteRackNameStub: api.CompleteRackName{DcName: "dc"}}
 
 	storageStateClient := &storagestateclientmock.StorageStateClient{}
 	storageStateClient.On("UpdatePVC", mock.Anything, mock.Anything).

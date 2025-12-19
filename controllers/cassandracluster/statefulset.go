@@ -190,7 +190,9 @@ func tryJsonPrettyPrint(patchResult []byte) string {
 
 // CreateOrUpdateStatefulSet Create statefulset if not found, or update it
 func (rcc *CassandraClusterReconciler) CreateOrUpdateStatefulSet(ctx context.Context, statefulSet *appsv1.StatefulSet,
-	status *api.CassandraClusterStatus, dcName, rackName, dcRackName string) (bool, error) {
+	status *api.CassandraClusterStatus, completeDcRackName api.CompleteRackName) (bool, error) {
+
+	dcRackName := completeDcRackName.DcRackName
 
 	// if there is an existing pod disruptions
 	// Or if we are not scaling Down the current statefulset
@@ -205,7 +207,7 @@ func (rcc *CassandraClusterReconciler) CreateOrUpdateStatefulSet(ctx context.Con
 		}
 	}
 
-	dcRackStatus := status.CassandraRackStatus[dcRackName]
+	dcRackStatus := status.GetCassandraRackStatus(dcRackName)
 	var err error
 	now := metav1.Now()
 
@@ -265,7 +267,7 @@ func (rcc *CassandraClusterReconciler) CreateOrUpdateStatefulSet(ctx context.Con
 		*statefulSet.Spec.Replicas = *rcc.storedStatefulSet.Spec.Replicas + incrementValue
 	}
 
-	rcc.RevertAnyStorageUpsizeBeyondUpsizeAction(dcName, rackName, dcRackName, dcRackStatus, statefulSet)
+	rcc.RevertAnyStorageUpsizeBeyondUpsizeAction(completeDcRackName, dcRackStatus, statefulSet)
 
 	if dcRackStatus.CassandraLastAction.Name == api.ActionRollingRestart.Name &&
 		dcRackStatus.CassandraLastAction.Status == api.StatusToDo {

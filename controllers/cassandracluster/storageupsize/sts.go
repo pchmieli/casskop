@@ -13,7 +13,6 @@ import (
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/lastapplied"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
-	"github.com/cscetbon/casskop/pkg/k8s"
 	json "github.com/json-iterator/go"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -158,7 +157,7 @@ func waitTillStatefulSetAndAllPodsAreReady(ctx context.Context, cc *api.Cassandr
 	}
 
 	if sts.IsStatefulSetReady(rack.StoredStatefulSet()) {
-		podList, err := podsClient.ListPods(ctx, cc.Namespace, k8s.LabelsForCassandraDCRack(cc, rack.DcName(), rack.RackName()))
+		podList, err := podsClient.ListPods(ctx, cc.Namespace, rack.GetLabelsForCassandraDCRack(cc))
 		if err != nil {
 			return actionstep.Error(err)
 		}

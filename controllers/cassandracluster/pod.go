@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 
+	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/cassandrapod"
 	"github.com/cscetbon/casskop/pkg/k8s"
 
@@ -160,8 +161,9 @@ func (rcc *CassandraClusterReconciler) UpdatePodLabel(ctx context.Context, pod *
 // - for lake of resources cpu/memory
 // - with bad docker image (imagepullbackoff)
 // - or else to add
-func (rcc *CassandraClusterReconciler) hasUnschedulablePod(ctx context.Context, namespace string, dcName, rackName string) bool {
-	podsList, err := rcc.ListPods(ctx, rcc.cc.Namespace, k8s.LabelsForCassandraDCRack(rcc.cc, dcName, rackName))
+func (rcc *CassandraClusterReconciler) hasUnschedulablePod(ctx context.Context, completeDcRackName api.CompleteRackName) bool {
+	labelsForList := k8s.LabelsForCassandraDCRackStrongTypes(rcc.cc, completeDcRackName.DcName, completeDcRackName.RackName)
+	podsList, err := rcc.ListPods(ctx, rcc.cc.Namespace, labelsForList)
 	if err != nil || len(podsList.Items) < 1 {
 		return false
 	}

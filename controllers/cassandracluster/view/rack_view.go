@@ -8,11 +8,12 @@ import (
 
 type RackView interface {
 	ClusterName() string
-	DcName() string
-	RackName() string
-	DcRackName() string
+	DcName() api.DcName
+	RackName() api.RackName
+	DcRackName() api.DcRackName
 	RackStatus() *api.CassandraRackStatus
 	StoredStatefulSet() *appsv1.StatefulSet
 	StoredStatefulSetExists() bool
+	GetLabelsForCassandraDCRack(cc *api.CassandraCluster) map[string]string
 	Log() *logrus.Entry
 }

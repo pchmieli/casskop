@@ -11,7 +11,6 @@ import (
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/actionstep"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
-	"github.com/cscetbon/casskop/pkg/k8s"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
@@ -49,7 +48,7 @@ func fetchDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.Rack
 func getAllDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
 	storageStateClient storagestateclient.StorageStateClient) ([]corev1.PersistentVolumeClaim, error) {
 
-	pvcs, err := storageStateClient.ListPVC(ctx, cc.Namespace, k8s.LabelsForCassandraDCRack(cc, rack.DcName(), rack.RackName()))
+	pvcs, err := storageStateClient.ListPVC(ctx, cc.Namespace, rack.GetLabelsForCassandraDCRack(cc))
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +83,7 @@ func getAllDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.Rac
 func ensureAllPVCsHaveNewCapacity(ctx context.Context, cc *api.CassandraCluster, dataPVCs []corev1.PersistentVolumeClaim,
 	rack view.RackView, storageStateClient storagestateclient.StorageStateClient) actionstep.StepResult {
 
-	requestedCapacity := silentParseResourceQuantity(cc.GetDataCapacityForDC(rack.DcName()))
+	requestedCapacity := silentParseResourceQuantity(cc.GetDataCapacityForDCName(rack.DcName()))
 
 	anythingChanged := false
 	var multiError error
@@ -117,7 +116,7 @@ func ensureAllPVCsHaveNewCapacity(ctx context.Context, cc *api.CassandraCluster,
 func waitTillAllFilesystemsHaveNewCapacity(cc *api.CassandraCluster, dataPVCs []corev1.PersistentVolumeClaim,
 	rack view.RackView) actionstep.StepResult {
 
-	requestedCapacity := silentParseResourceQuantity(cc.GetDataCapacityForDC(rack.DcName()))
+	requestedCapacity := silentParseResourceQuantity(cc.GetDataCapacityForDCName(rack.DcName()))
 
 	var resized, notResizedYet []string
 

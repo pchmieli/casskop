@@ -3,15 +3,14 @@ package stub
 import (
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
+	"github.com/cscetbon/casskop/pkg/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 )
 
 type RackView struct {
 	ClusterNameStub       string
-	DcNameStubStub        string
-	RackNameStub          string
-	DcRackNameStub        string
+	CompleteRackNameStub  api.CompleteRackName
 	RackStatusStub        *api.CassandraRackStatus
 	StoredStatefulSetStub *appsv1.StatefulSet
 }
@@ -22,16 +21,16 @@ func (v RackView) ClusterName() string {
 	return v.ClusterNameStub
 }
 
-func (v RackView) DcName() string {
-	return v.DcNameStubStub
+func (v RackView) DcName() api.DcName {
+	return v.CompleteRackNameStub.DcName
 }
 
-func (v RackView) RackName() string {
-	return v.RackNameStub
+func (v RackView) RackName() api.RackName {
+	return v.CompleteRackNameStub.RackName
 }
 
-func (v RackView) DcRackName() string {
-	return v.DcRackNameStub
+func (v RackView) DcRackName() api.DcRackName {
+	return v.CompleteRackNameStub.DcRackName
 }
 
 func (v RackView) RackStatus() *api.CassandraRackStatus {
@@ -44,6 +43,10 @@ func (v RackView) StoredStatefulSet() *appsv1.StatefulSet {
 
 func (v RackView) StoredStatefulSetExists() bool {
 	return v.StoredStatefulSetStub != nil
+}
+
+func (v RackView) GetLabelsForCassandraDCRack(cc *api.CassandraCluster) map[string]string {
+	return k8s.LabelsForCassandraDCRack(cc, v.DcName().String(), v.RackName().String())
 }
 
 func (v RackView) Log() *logrus.Entry {

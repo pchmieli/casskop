@@ -9,20 +9,21 @@ import (
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
+	"github.com/cscetbon/casskop/pkg/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 )
 
-func (rcc *CassandraClusterReconciler) RevertAnyStorageUpsizeBeyondUpsizeAction(dcName, rackName, dcRackName string,
+func (rcc *CassandraClusterReconciler) RevertAnyStorageUpsizeBeyondUpsizeAction(completeDcRackName api.CompleteRackName,
 	dcRackStatus *api.CassandraRackStatus, statefulSet *appsv1.StatefulSet) {
 
-	storageupsize.RevertAnyStorageUpsizeBeyondUpsizeAction(rcc.newRackView(dcName, rackName, dcRackName, dcRackStatus), statefulSet)
+	storageupsize.RevertAnyStorageUpsizeBeyondUpsizeAction(rcc.newRackView(completeDcRackName, dcRackStatus), statefulSet)
 }
 
-func (rcc *CassandraClusterReconciler) UpdateStatusIfStorageUpsize(dcName, rackName, dcRackName string,
+func (rcc *CassandraClusterReconciler) UpdateStatusIfStorageUpsize(completeDcRackName api.CompleteRackName,
 	status *api.CassandraClusterStatus) bool {
 
-	rackView := rcc.newRackView(dcName, rackName, dcRackName, status.CassandraRackStatus[dcRackName])
+	rackView := rcc.newRackView(completeDcRackName, status.GetCassandraRackStatus(completeDcRackName.DcRackName))
 	if rcc.ShouldStorageUpsizeBeStarted(rackView) {
 		rcc.StartStorageUpsize(rackView)
 		return true
@@ -31,8 +32,7 @@ func (rcc *CassandraClusterReconciler) UpdateStatusIfStorageUpsize(dcName, rackN
 }
 
 func (rcc *CassandraClusterReconciler) ShouldStorageUpsizeBeStarted(rackView view.RackView) bool {
-	return storageupsize.ShouldBeStarted(rackView, rcc.cc.GetDataCapacityForDC(rackView.DcName()))
-
+	return storageupsize.ShouldBeStarted(rackView, rcc.cc.GetDataCapacityForDCName(rackView.DcName()))
 }
 
 func (rcc *CassandraClusterReconciler) StartStorageUpsize(rackView view.RackView) {
@@ -46,16 +46,15 @@ func (rcc *CassandraClusterReconciler) IsStorageUpsizeStarted(dcRackStatus *api.
 }
 
 func (rcc *CassandraClusterReconciler) ReconcileStorageUpsize(ctx context.Context, cc *api.CassandraCluster,
-	status *api.CassandraClusterStatus, dcName string, rackName string) error {
+	status *api.CassandraClusterStatus, completeDcRackName api.CompleteRackName) error {
 
-	dcRackName := cc.GetDCRackName(dcName, rackName)
-	status.CassandraRackStatus[dcRackName].Phase = api.ClusterPhasePending.Name
+	status.GetCassandraRackStatus(completeDcRackName.DcRackName).Phase = api.ClusterPhasePending.Name
 	ClusterPhaseMetric.set(api.ClusterPhasePending, cc.Name)
 
-	newDataCapacity := generateResourceQuantity(cc.GetDataCapacityForDC(dcName))
+	newDataCapacity := generateResourceQuantity(cc.GetDataCapacityForDCName(completeDcRackName.DcName))
 	setNewDataCapacity := storageupsize.DataCapacitySetter(newDataCapacity)
 
-	rackView := rcc.newRackView(dcName, rackName, dcRackName, status.CassandraRackStatus[dcRackName])
+	rackView := rcc.newRackView(completeDcRackName, status.GetCassandraRackStatus(completeDcRackName.DcRackName))
 	var storageStateClient storagestateclient.StorageStateClient = rcc
 	var stsClient sts.StsClient = rcc
 	var podsClient pods.PodsClient = rcc
@@ -63,24 +62,20 @@ func (rcc *CassandraClusterReconciler) ReconcileStorageUpsize(ctx context.Contex
 	return storageupsize.Reconcile(ctx, cc, rackView, setNewDataCapacity, storageStateClient, stsClient, podsClient)
 }
 
-func (rcc *CassandraClusterReconciler) newRackView(dcName, rackName, dcRackName string,
+func (rcc *CassandraClusterReconciler) newRackView(completeRackName api.CompleteRackName,
 	dcRackStatus *api.CassandraRackStatus) view.RackView {
 
 	return &rccRackView{
-		rcc:          rcc,
-		dcName:       dcName,
-		rackName:     rackName,
-		dcRackName:   dcRackName,
-		dcRackStatus: dcRackStatus,
+		rcc:              rcc,
+		completeRackName: completeRackName,
+		dcRackStatus:     dcRackStatus,
 	}
 }
 
 type rccRackView struct {
-	rcc          *CassandraClusterReconciler
-	dcName       string
-	rackName     string
-	dcRackName   string
-	dcRackStatus *api.CassandraRackStatus
+	rcc              *CassandraClusterReconciler
+	completeRackName api.CompleteRackName
+	dcRackStatus     *api.CassandraRackStatus
 }
 
 var _ view.RackView = (*rccRackView)(nil)
@@ -89,16 +84,16 @@ func (v *rccRackView) ClusterName() string {
 	return v.rcc.cc.Name
 }
 
-func (v *rccRackView) DcName() string {
-	return v.dcName
+func (v *rccRackView) DcName() api.DcName {
+	return v.completeRackName.DcName
 }
 
-func (v *rccRackView) RackName() string {
-	return v.rackName
+func (v *rccRackView) RackName() api.RackName {
+	return v.completeRackName.RackName
 }
 
-func (v *rccRackView) DcRackName() string {
-	return v.dcRackName
+func (v *rccRackView) DcRackName() api.DcRackName {
+	return v.completeRackName.DcRackName
 }
 
 func (v *rccRackView) RackStatus() *api.CassandraRackStatus {
@@ -111,6 +106,10 @@ func (v *rccRackView) StoredStatefulSet() *appsv1.StatefulSet {
 
 func (v *rccRackView) StoredStatefulSetExists() bool {
 	return v.rcc.storedStatefulSet != nil
+}
+
+func (v *rccRackView) GetLabelsForCassandraDCRack(cc *api.CassandraCluster) map[string]string {
+	return k8s.LabelsForCassandraDCRackStrongTypes(cc, v.DcName(), v.RackName())
 }
 
 func (v *rccRackView) Log() *logrus.Entry {

@@ -145,10 +145,10 @@ func (rcc *CassandraClusterReconciler) CheckNonAllowedChanges(ctx context.Contex
 	}
 
 	for dc := 0; dc < cc.GetDCSize(); dc++ {
-		dcName := cc.GetDCName(dc)
+		dcName := cc.GetDCNameStrongType(dc)
 
-		oldCapacity := oldCRD.GetDataCapacityForDC(dcName)
-		requestedCapacity := cc.GetDataCapacityForDC(dcName)
+		oldCapacity := oldCRD.GetDataCapacityForDCName(dcName)
+		requestedCapacity := cc.GetDataCapacityForDCName(dcName)
 		dataCapacityChange := storageupsize.AnalyzeDataCapacityChange(oldCapacity, requestedCapacity)
 		switch dataCapacityChange {
 		case storageupsize.CapacityUpsize:
@@ -171,10 +171,10 @@ func (rcc *CassandraClusterReconciler) CheckNonAllowedChanges(ctx context.Contex
 		}
 
 		//DataStorage
-		if cc.GetDataStorageClassForDC(dcName) != oldCRD.GetDataStorageClassForDC(dcName) {
+		if cc.GetDataStorageClassForDCName(dcName) != oldCRD.GetDataStorageClassForDCName(dcName) {
 			logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dcName": dcName}).
 				Warningf("The Operator has refused the change on DataStorageClass from [%s] to NewValue[%s]",
-					oldCRD.GetDataStorageClassForDC(dcName), cc.GetDataStorageClassForDC(dcName))
+					oldCRD.GetDataStorageClassForDCName(dcName), cc.GetDataStorageClassForDCName(dcName))
 			cc.Spec.DataStorageClass = oldCRD.Spec.DataStorageClass
 			cc.Spec.Topology.DC[dc].DataStorageClass = oldCRD.Spec.Topology.DC[dc].DataStorageClass
 			needUpdate = true
@@ -468,6 +468,11 @@ func (rcc *CassandraClusterReconciler) ReconcileRack(ctx context.Context, cc *ap
 			if dcRackName == "" {
 				return fmt.Errorf("name used for DC and/or Rack are not good")
 			}
+			completeDcRackName := api.CompleteRackName{
+				DcName:     api.DcName(dcName),
+				RackName:   api.RackName(rackName),
+				DcRackName: api.DcRackName(dcRackName),
+			}
 
 			//If we have added a dc/rack to the CRD, we add it to the Status
 			if _, exists := status.CassandraRackStatus[dcRackName]; !exists {
@@ -493,10 +498,10 @@ func (rcc *CassandraClusterReconciler) ReconcileRack(ctx context.Context, cc *ap
 			} else {
 
 				//Update CassandraClusterPhase
-				rcc.UpdateCassandraRackStatusPhase(ctx, cc, dcName, rackName, storedStatefulSet, status)
+				rcc.UpdateCassandraRackStatusPhase(ctx, cc, completeDcRackName, storedStatefulSet, status)
 
 				//Find if there is an Action to execute/end
-				rcc.getNextCassandraClusterStatus(ctx, cc, dc, rack, dcName, rackName, storedStatefulSet, status)
+				rcc.getNextCassandraClusterStatus(ctx, cc, dc, rack, completeDcRackName, storedStatefulSet, status)
 
 				//If not Initializing cluster execute pod operations queued
 				if dcRackStatus.Phase != api.ClusterPhaseInitial.Name {
@@ -554,10 +559,10 @@ func (rcc *CassandraClusterReconciler) ReconcileRack(ctx context.Context, cc *ap
 				} else {
 					rcc.storedStatefulSet = storedStatefulSet
 				}
-				return rcc.ReconcileStorageUpsize(ctx, cc, status, dcName, rackName)
+				return rcc.ReconcileStorageUpsize(ctx, cc, status, completeDcRackName)
 			}
 
-			breakLoop, err := rcc.ensureCassandraStatefulSet(ctx, cc, status, dcName, rackName, dcRackName, dc, rack)
+			breakLoop, err := rcc.ensureCassandraStatefulSet(ctx, cc, status, completeDcRackName, dc, rack)
 			if err != nil {
 				logrus.WithFields(logrus.Fields{"cluster": cc.Name,
 					"dc-rack": dcRackName}).Errorf("ensureCassandraStatefulSet Error: %v", err)

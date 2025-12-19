@@ -334,7 +334,7 @@ func TestUpdateStatusIfconfigMapHasChangedWithNoConfigMap(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get statefulset: (%v)", err)
 			}
-			assert.Equal(t, false, UpdateStatusIfconfigMapHasChanged(rcc.cc, dcRackName, sts, &rcc.cc.Status))
+			assert.Equal(t, false, UpdateStatusIfconfigMapHasChanged(rcc.cc, api.DcRackName(dcRackName), sts, &rcc.cc.Status))
 		}
 	}
 
@@ -352,7 +352,7 @@ func TestUpdateStatusIfconfigMapHasChangedWithNoConfigMap(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get statefulset: (%v)", err)
 			}
-			assert.Equal(t, true, UpdateStatusIfconfigMapHasChanged(rcc.cc, dcRackName, sts, &rcc.cc.Status))
+			assert.Equal(t, true, UpdateStatusIfconfigMapHasChanged(rcc.cc, api.DcRackName(dcRackName), sts, &rcc.cc.Status))
 		}
 	}
 
@@ -391,7 +391,7 @@ func TestUpdateStatusIfconfigMapHasChangedWithConfigMap(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get statefulset: (%v)", err)
 			}
-			assert.Equal(t, false, UpdateStatusIfconfigMapHasChanged(rcc.cc, dcRackName, sts, &rcc.cc.Status))
+			assert.Equal(t, false, UpdateStatusIfconfigMapHasChanged(rcc.cc, api.DcRackName(dcRackName), sts, &rcc.cc.Status))
 		}
 	}
 
@@ -409,7 +409,7 @@ func TestUpdateStatusIfconfigMapHasChangedWithConfigMap(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get statefulset: (%v)", err)
 			}
-			assert.Equal(t, true, UpdateStatusIfconfigMapHasChanged(rcc.cc, dcRackName, sts, &rcc.cc.Status))
+			assert.Equal(t, true, UpdateStatusIfconfigMapHasChanged(rcc.cc, api.DcRackName(dcRackName), sts, &rcc.cc.Status))
 		}
 	}
 
@@ -427,7 +427,7 @@ func TestUpdateStatusIfconfigMapHasChangedWithConfigMap(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get statefulset: (%v)", err)
 			}
-			assert.Equal(t, true, UpdateStatusIfconfigMapHasChanged(rcc.cc, dcRackName, sts, &rcc.cc.Status))
+			assert.Equal(t, true, UpdateStatusIfconfigMapHasChanged(rcc.cc, api.DcRackName(dcRackName), sts, &rcc.cc.Status))
 		}
 	}
 
@@ -466,7 +466,7 @@ func TestUpdateStatusIfDockerImageHasChanged(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get statefulset: (%v)", err)
 			}
-			assert.Equal(t, false, UpdateStatusIfDockerImageHasChanged(rcc.cc, dcRackName, sts, &rcc.cc.Status))
+			assert.Equal(t, false, UpdateStatusIfDockerImageHasChanged(rcc.cc, api.DcRackName(dcRackName), sts, &rcc.cc.Status))
 		}
 	}
 
@@ -484,7 +484,7 @@ func TestUpdateStatusIfDockerImageHasChanged(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get statefulset: (%v)", err)
 			}
-			assert.Equal(t, true, UpdateStatusIfDockerImageHasChanged(rcc.cc, dcRackName, sts, &rcc.cc.Status))
+			assert.Equal(t, true, UpdateStatusIfDockerImageHasChanged(rcc.cc, api.DcRackName(dcRackName), sts, &rcc.cc.Status))
 		}
 	}
 
