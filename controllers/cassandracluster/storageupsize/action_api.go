@@ -11,6 +11,7 @@ import (
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func ShouldBeStarted(rack view.RackView, requestedCapacity string) bool {
@@ -38,8 +39,7 @@ func IsStarted(dcRackStatus *api.CassandraRackStatus) bool {
 // - execute an action and break the loop (if action was not finished before or even not started yet)
 // - do nothing and continue to the next step pass (if action was finished before)
 // Usually step do its job once and break the loop, then in the next reconcile loop this step "pass" and the next step is executed
-func Reconcile(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
-	setNewDataSize func(statefulSet *appsv1.StatefulSet) error,
+func Reconcile(ctx context.Context, cc *api.CassandraCluster, rack view.RackView, newDataCapacity resource.Quantity,
 	storageStateClient storagestateclient.StorageStateClient, stsClient sts.StsClient, podsClient pods.PodsClient) error {
 
 	dataPVCs := make([]corev1.PersistentVolumeClaim, 0)
@@ -47,7 +47,7 @@ func Reconcile(ctx context.Context, cc *api.CassandraCluster, rack view.RackView
 	steps := []func() as.StepResult{
 		func() as.StepResult { return makeOldStatefulSetSnapshot(rack) },
 		func() as.StepResult { return removeStatefulSetOrphan(ctx, cc, rack, stsClient) },
-		func() as.StepResult { return recreateStatefulSetWithNewCapacity(ctx, rack, setNewDataSize, stsClient) },
+		func() as.StepResult { return recreateStatefulSetWithNewCapacity(ctx, rack, newDataCapacity, stsClient) },
 		func() as.StepResult { return fetchDataPvcs(ctx, cc, rack, storageStateClient, &dataPVCs) },
 		func() as.StepResult { return ensureAllPVCsHaveNewCapacity(ctx, cc, dataPVCs, rack, storageStateClient) },
 		func() as.StepResult { return waitTillAllFilesystemsHaveNewCapacity(cc, dataPVCs, rack) },

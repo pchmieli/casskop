@@ -42,12 +42,12 @@ func prepareStatefulSetSnapshot(storedStatefulSet *appsv1.StatefulSet) (string, 
 	return string(statefulSetSnapshotJson), nil
 }
 
-func applyPVCModification(newStatefulSet *appsv1.StatefulSet, setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error) error {
-	err := setNewDataCapacity(newStatefulSet)
+func applyPVCModification(newStatefulSet *appsv1.StatefulSet, newDataCapacity resource.Quantity) error {
+	err := setNewDataCapacity(newStatefulSet, newDataCapacity)
 	if err != nil {
 		return err
 	}
-	return enrichWithCleanLastAppliedAnnotation(newStatefulSet, setNewDataCapacity)
+	return enrichWithCleanLastAppliedAnnotation(newStatefulSet, newDataCapacity)
 }
 
 // enrichWithCleanLastAppliedAnnotation
@@ -72,8 +72,7 @@ func applyPVCModification(newStatefulSet *appsv1.StatefulSet, setNewDataCapacity
 //     we would put into the annotations an object with Kubernetes defaults (added by the k8s API server)
 //   - that would force an update during the 3-way merge after the resize
 //     (StatefulSet generated from the CR would be clean and would not match the polluted last-applied in the stored StatefulSet)
-func enrichWithCleanLastAppliedAnnotation(newStatefulSet *appsv1.StatefulSet,
-	setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error) error {
+func enrichWithCleanLastAppliedAnnotation(newStatefulSet *appsv1.StatefulSet, newDataCapacity resource.Quantity) error {
 
 	originalStatefulSet, err := lastapplied.GetOriginalSts(newStatefulSet)
 	if err != nil {
@@ -81,7 +80,7 @@ func enrichWithCleanLastAppliedAnnotation(newStatefulSet *appsv1.StatefulSet,
 		return nil
 	}
 
-	err = setNewDataCapacity(&originalStatefulSet)
+	err = setNewDataCapacity(&originalStatefulSet, newDataCapacity)
 	if err != nil {
 		// best effort: cannot edit original sts so skip setting last-applied annotation, would lead to extra update after resize (no pod restart)
 		return nil
@@ -121,8 +120,8 @@ func doesStatefulSetHaveNewCapacity(cc *api.CassandraCluster, storedStatefulSet 
 	return requested.Equal(current)
 }
 
-func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView,
-	setNewDataCapacity func(statefulSet *appsv1.StatefulSet) error, stsClient sts.StsClient) actionstep.StepResult {
+func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView, newDataCapacity resource.Quantity,
+	stsClient sts.StsClient) actionstep.StepResult {
 
 	if rack.StoredStatefulSetExists() {
 		return actionstep.Pass()
@@ -135,7 +134,7 @@ func recreateStatefulSetWithNewCapacity(ctx context.Context, rack view.RackView,
 		return actionstep.Error(err)
 	}
 
-	err = applyPVCModification(newStatefulSet, setNewDataCapacity)
+	err = applyPVCModification(newStatefulSet, newDataCapacity)
 	if err != nil {
 		return actionstep.Error(err)
 	}
@@ -181,15 +180,13 @@ func waitTillStatefulSetAndAllPodsAreReady(ctx context.Context, cc *api.Cassandr
 	return actionstep.Break()
 }
 
-func DataCapacitySetter(dataCapacity resource.Quantity) func(statefulSet *appsv1.StatefulSet) error {
-	return func(statefulSet *appsv1.StatefulSet) error {
-		for i, template := range statefulSet.Spec.VolumeClaimTemplates {
-			if template.Name == consts.DataPVCName {
-				template.Spec.Resources.Requests["storage"] = dataCapacity
-				statefulSet.Spec.VolumeClaimTemplates[i] = template
-				return nil
-			}
+func setNewDataCapacity(statefulSet *appsv1.StatefulSet, dataCapacity resource.Quantity) error {
+	for i, template := range statefulSet.Spec.VolumeClaimTemplates {
+		if template.Name == consts.DataPVCName {
+			template.Spec.Resources.Requests["storage"] = dataCapacity
+			statefulSet.Spec.VolumeClaimTemplates[i] = template
+			return nil
 		}
-		return errors.New(fmt.Sprintf("no %s pvc found in statefulSet %s", consts.DataPVCName, statefulSet.Name))
 	}
+	return errors.New(fmt.Sprintf("no %s pvc found in statefulSet %s", consts.DataPVCName, statefulSet.Name))
 }

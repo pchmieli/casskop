@@ -52,14 +52,13 @@ func (rcc *CassandraClusterReconciler) ReconcileStorageUpsize(ctx context.Contex
 	ClusterPhaseMetric.set(api.ClusterPhasePending, cc.Name)
 
 	newDataCapacity := generateResourceQuantity(cc.GetDataCapacityForDCName(completeDcRackName.DcName))
-	setNewDataCapacity := storageupsize.DataCapacitySetter(newDataCapacity)
 
 	rackView := rcc.newRackView(completeDcRackName, status.GetCassandraRackStatus(completeDcRackName.DcRackName))
 	var storageStateClient storagestateclient.StorageStateClient = rcc
 	var stsClient sts.StsClient = rcc
 	var podsClient pods.PodsClient = rcc
 
-	return storageupsize.Reconcile(ctx, cc, rackView, setNewDataCapacity, storageStateClient, stsClient, podsClient)
+	return storageupsize.Reconcile(ctx, cc, rackView, newDataCapacity, storageStateClient, stsClient, podsClient)
 }
 
 func (rcc *CassandraClusterReconciler) newRackView(completeRackName api.CompleteRackName,

@@ -32,7 +32,6 @@ func Test_enrichWithCleanLastAppliedAnnotation(t *testing.T) {
 	const OldStsKey = "banzaicloud.com/last-applied"
 	const InitialCapacity = "5Gi"
 	const CapacityAfterUpsize = "10Gi"
-	dataCapacitySetter := DataCapacitySetter(resource.MustParse(CapacityAfterUpsize))
 	getStsBeforeChange := func() *appsv1.StatefulSet {
 		return &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 			pvc(consts.DataPVCName, InitialCapacity),
@@ -42,7 +41,7 @@ func Test_enrichWithCleanLastAppliedAnnotation(t *testing.T) {
 	t.Run("no data pvc - error expected", func(t *testing.T) {
 		statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1"}}
 
-		err := applyPVCModification(statefulSet, dataCapacitySetter)
+		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
 
 		assert.EqualError(t, err, "no data pvc found in statefulSet dc1-rack1")
 	})
@@ -50,7 +49,7 @@ func Test_enrichWithCleanLastAppliedAnnotation(t *testing.T) {
 	t.Run("no old sts - should just apply new capacity", func(t *testing.T) {
 		statefulSet := getStsBeforeChange()
 
-		err := applyPVCModification(statefulSet, dataCapacitySetter)
+		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
@@ -64,7 +63,7 @@ func Test_enrichWithCleanLastAppliedAnnotation(t *testing.T) {
 			OldStsKey: "malformed-annotation",
 		}
 
-		err := applyPVCModification(statefulSet, dataCapacitySetter)
+		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
@@ -87,7 +86,7 @@ func Test_enrichWithCleanLastAppliedAnnotation(t *testing.T) {
 			OldStsKey: oldStsWithoutDataPvc,
 		}
 
-		err := applyPVCModification(statefulSet, dataCapacitySetter)
+		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
@@ -101,7 +100,7 @@ func Test_enrichWithCleanLastAppliedAnnotation(t *testing.T) {
 			OldStsKey: string(toJson(t, statefulSet)),
 		}
 
-		err := applyPVCModification(statefulSet, dataCapacitySetter)
+		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
@@ -111,14 +110,13 @@ func Test_enrichWithCleanLastAppliedAnnotation(t *testing.T) {
 }
 
 func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
-	increaseCapacityTo15Gi := DataCapacitySetter(resource.MustParse("15Gi"))
 
 	t.Run("statefulSet already exists - no op", func(t *testing.T) {
 		rack := stub.RackView{
 			StoredStatefulSetStub: &appsv1.StatefulSet{},
 		}
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, increaseCapacityTo15Gi, nil)
+		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), nil)
 
 		assert.False(t, result.HasError())
 		assert.NoError(t, result.Error())
@@ -132,7 +130,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			},
 		}
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, increaseCapacityTo15Gi, nil)
+		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), nil)
 
 		assert.True(t, result.HasError())
 		assert.Contains(t, result.Error().Error(), "cannot unmarshall snapshotted statefulSet for storage upsize")
@@ -154,7 +152,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			},
 		}
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, increaseCapacityTo15Gi, nil)
+		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), nil)
 
 		assert.True(t, result.HasError())
 		assert.Contains(t, result.Error().Error(), "no data pvc found in statefulSet dc1-rack1")
@@ -177,7 +175,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 		}
 		cl := fake.NewClientBuilder().Build()
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, increaseCapacityTo15Gi, sts.NewClient(cl))
+		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), sts.NewClient(cl))
 
 		assert.False(t, result.HasError())
 		assert.NoError(t, result.Error())
@@ -208,7 +206,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			},
 		})
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, increaseCapacityTo15Gi, sts.NewClient(cl))
+		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), sts.NewClient(cl))
 
 		assert.True(t, result.HasError())
 		assert.Contains(t, result.Error().Error(), "creation failed")
