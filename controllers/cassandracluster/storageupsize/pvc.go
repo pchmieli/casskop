@@ -35,6 +35,17 @@ func silentParseResourceQuantity(qs string) resource.Quantity {
 	return q
 }
 
+func fetchDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
+	storageStateClient storagestateclient.StorageStateClient, x *[]corev1.PersistentVolumeClaim) actionstep.StepResult {
+
+	dataPVCs, err := getAllDataPvcs(ctx, cc, rack, storageStateClient)
+	if err != nil {
+		return actionstep.Error(err)
+	}
+	*x = dataPVCs
+	return actionstep.Pass()
+}
+
 func getAllDataPvcs(ctx context.Context, cc *api.CassandraCluster, rack view.RackView,
 	storageStateClient storagestateclient.StorageStateClient) ([]corev1.PersistentVolumeClaim, error) {
 
