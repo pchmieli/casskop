@@ -66,10 +66,10 @@ func applyPVCModification(newStatefulSet *appsv1.StatefulSet, setNewDataCapacity
 //
 // 3. Why do we need to manually handle last-applied annotation on the storedStatefulSet?
 //   - Banzai stores the original object in annotations and performs a 3-way merge on update
-//   - storedStatefulSet is an object fetched from k8s API, so it contains kubernetes garbage/defaults
+//   - storedStatefulSet is an object fetched from k8s API, so it contains Kubernetes defaults (added by the k8s API server)
 //   - if we simply did
 //     `patch.DefaultAnnotator.SetLastAppliedAnnotation(newStatefulSet)`
-//     we would put into the annotations an object with Kubernetes garbage/defaults
+//     we would put into the annotations an object with Kubernetes defaults (added by the k8s API server)
 //   - that would force an update during the 3-way merge after the resize
 //     (StatefulSet generated from the CR would be clean and would not match the polluted last-applied in the stored StatefulSet)
 func enrichWithCleanLastAppliedAnnotation(newStatefulSet *appsv1.StatefulSet,
