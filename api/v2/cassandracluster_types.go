@@ -70,7 +70,8 @@ var (
 
 	ActionCorrectCRDConfig = ClusterStateInfo{11, "CorrectCRDConfig"} //The Operator has correct a bad CRD configuration
 
-	ActionStorageUpsize = ClusterStateInfo{12, "StorageUpsize"}
+	ActionStorageUpsize    = ClusterStateInfo{12, "StorageUpsize"}    // data PVC extension only
+	ActionStorageMigration = ClusterStateInfo{13, "StorageMigration"} // data PVC shrinking or storage class change or both
 
 	regexDCRackName = regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 )
