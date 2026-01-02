@@ -25,7 +25,7 @@ import (
 
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/cassandrapod"
-	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize"
+	storagechange "github.com/cscetbon/casskop/controllers/cassandracluster/storage/change"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/pkg/k8s"
 	"github.com/prometheus/client_golang/prometheus"
@@ -149,20 +149,20 @@ func (rcc *CassandraClusterReconciler) CheckNonAllowedChanges(ctx context.Contex
 
 		oldCapacity := oldCRD.GetDataCapacityForDCName(dcName)
 		requestedCapacity := cc.GetDataCapacityForDCName(dcName)
-		dataCapacityChange := storageupsize.AnalyzeDataCapacityChange(oldCapacity, requestedCapacity)
+		dataCapacityChange := storagechange.AnalyzeDataCapacityChange(oldCapacity, requestedCapacity)
 		switch dataCapacityChange {
-		case storageupsize.CapacityUpsize:
+		case storagechange.CapacityUpsize:
 			logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dcName": dcName}).
 				Infof("The Operator has accepted the DataCapacity upsize from [%s] to NewValue[%s]",
 					oldCapacity, requestedCapacity)
-		case storageupsize.CapacityDownsize:
+		case storagechange.CapacityDownsize:
 			logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dcName": dcName}).
 				Warningf("The Operator has refused the change on DataCapacity from [%s] to NewValue[%s]",
 					oldCapacity, requestedCapacity)
 			cc.Spec.DataCapacity = oldCRD.Spec.DataCapacity
 			cc.Spec.Topology.DC[dc].DataCapacity = oldCRD.Spec.Topology.DC[dc].DataCapacity
 			needUpdate = true
-		case storageupsize.CapacitySyntacticChange:
+		case storagechange.CapacitySyntacticChange:
 			logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dcName": dcName}).
 				Debugf("The Operator has ignored the change on DataCapacity from [%s] to NewValue[%s] "+
 					"as semantically nothing changes", oldCapacity, requestedCapacity)

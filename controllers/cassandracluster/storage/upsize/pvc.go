@@ -1,4 +1,4 @@
-package storageupsize
+package upsize
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/consts"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/storage/actionstep"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient"
-	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/actionstep"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/multierr"

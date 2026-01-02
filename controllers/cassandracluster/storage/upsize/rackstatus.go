@@ -1,10 +1,10 @@
-package storageupsize
+package upsize
 
 import (
 	"errors"
 
 	api "github.com/cscetbon/casskop/api/v2"
-	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/actionstep"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/storage/actionstep"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
 	json "github.com/json-iterator/go"
 	appsv1 "k8s.io/api/apps/v1"

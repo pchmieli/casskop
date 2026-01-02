@@ -1,12 +1,12 @@
-package storageupsize
+package upsize
 
 import (
 	"context"
 
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/pods"
+	as "github.com/cscetbon/casskop/controllers/cassandracluster/storage/actionstep"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient"
-	as "github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/actionstep"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
 	appsv1 "k8s.io/api/apps/v1"

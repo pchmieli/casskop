@@ -5,8 +5,8 @@ import (
 
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/pods"
+	storageupsize "github.com/cscetbon/casskop/controllers/cassandracluster/storage/upsize"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient"
-	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
 	"github.com/cscetbon/casskop/pkg/k8s"

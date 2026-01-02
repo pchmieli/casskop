@@ -1,4 +1,4 @@
-package storageupsize
+package upsize
 
 import (
 	"context"

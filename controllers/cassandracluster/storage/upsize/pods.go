@@ -1,4 +1,4 @@
-package storageupsize
+package upsize
 
 import (
 	"github.com/cscetbon/casskop/controllers/cassandracluster/cassandrapod"

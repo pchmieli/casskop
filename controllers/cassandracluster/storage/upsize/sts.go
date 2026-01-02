@@ -1,4 +1,4 @@
-package storageupsize
+package upsize
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/consts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/pods"
-	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/actionstep"
-	"github.com/cscetbon/casskop/controllers/cassandracluster/storageupsize/lastapplied"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/storage/actionstep"
+	"github.com/cscetbon/casskop/controllers/cassandracluster/storage/lastapplied"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
 	json "github.com/json-iterator/go"
