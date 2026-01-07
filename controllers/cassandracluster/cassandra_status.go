@@ -127,6 +127,9 @@ func (rcc *CassandraClusterReconciler) getNextCassandraClusterStatus(ctx context
 		}
 
 		rcc.storedStatefulSet = storedStatefulSet
+		if rcc.UpdateStatusIfStorageMigration(completeDcRackName, status) {
+			return nil
+		}
 		if rcc.UpdateStatusIfStorageUpsize(completeDcRackName, status) {
 			return nil
 		}
@@ -438,6 +441,8 @@ func (rcc *CassandraClusterReconciler) UpdateStatusIfActionEnded(ctx context.Con
 			return false
 
 		case api.ActionStorageUpsize.Name:
+			fallthrough
+		case api.ActionStorageMigration.Name:
 			//nothing particular here
 			return false
 

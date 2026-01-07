@@ -1,4 +1,4 @@
-package upsize
+package change
 
 import (
 	"archive/zip"
@@ -11,6 +11,7 @@ import (
 	"github.com/banzaicloud/k8s-objectmatcher/patch"
 	v2 "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/consts"
+	stu "github.com/cscetbon/casskop/controllers/cassandracluster/storage/testutils"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view/stub"
 	json "github.com/json-iterator/go"
@@ -27,21 +28,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
-func Test_applyPVCModification(t *testing.T) {
+var testCtx = context.Background()
+
+func Test_ApplyPVCModification(t *testing.T) {
 
 	const OldStsKey = "banzaicloud.com/last-applied"
 	const InitialCapacity = "5Gi"
 	const CapacityAfterUpsize = "10Gi"
 	getStsBeforeChange := func() *appsv1.StatefulSet {
 		return &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, InitialCapacity),
+			stu.Pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 	}
 
 	t.Run("no data pvc - error expected", func(t *testing.T) {
 		statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1"}}
 
-		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
+		err := ApplyPVCModification(statefulSet, NewDataPVCCapacityChange(resource.MustParse(CapacityAfterUpsize)))
 
 		assert.EqualError(t, err, "no data pvc found in statefulSet dc1-rack1")
 	})
@@ -49,11 +52,12 @@ func Test_applyPVCModification(t *testing.T) {
 	t.Run("no old sts - should just apply new capacity", func(t *testing.T) {
 		statefulSet := getStsBeforeChange()
 
-		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
+		err := ApplyPVCModification(statefulSet, NewDataPVCCapacityChange(resource.MustParse(CapacityAfterUpsize)))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
 			statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage])
+		assert.Equal(t, "old-storage-class", *statefulSet.Spec.VolumeClaimTemplates[0].Spec.StorageClassName)
 		assert.Empty(t, statefulSet.Annotations[OldStsKey])
 	})
 
@@ -63,11 +67,12 @@ func Test_applyPVCModification(t *testing.T) {
 			OldStsKey: "malformed-annotation",
 		}
 
-		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
+		err := ApplyPVCModification(statefulSet, NewDataPVCCapacityChange(resource.MustParse(CapacityAfterUpsize)))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
 			statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage])
+		assert.Equal(t, "old-storage-class", *statefulSet.Spec.VolumeClaimTemplates[0].Spec.StorageClassName)
 		assert.Equal(t, "malformed-annotation", statefulSet.Annotations[OldStsKey])
 	})
 
@@ -76,8 +81,8 @@ func Test_applyPVCModification(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1"},
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-					pvc("some-other-pvc1", "1Gi"),
-					pvc("some-other-pvc2", "1Gi"),
+					stu.Pvc("some-other-pvc1", "1Gi"),
+					stu.Pvc("some-other-pvc2", "1Gi"),
 				},
 			},
 		}))
@@ -86,11 +91,12 @@ func Test_applyPVCModification(t *testing.T) {
 			OldStsKey: oldStsWithoutDataPvc,
 		}
 
-		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
+		err := ApplyPVCModification(statefulSet, NewDataPVCCapacityChange(resource.MustParse(CapacityAfterUpsize)))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
 			statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage])
+		assert.Equal(t, "old-storage-class", *statefulSet.Spec.VolumeClaimTemplates[0].Spec.StorageClassName)
 		assert.Equal(t, oldStsWithoutDataPvc, unzip(statefulSet.Annotations[OldStsKey]))
 	})
 
@@ -100,11 +106,42 @@ func Test_applyPVCModification(t *testing.T) {
 			OldStsKey: string(toJson(t, statefulSet)),
 		}
 
-		err := applyPVCModification(statefulSet, resource.MustParse(CapacityAfterUpsize))
+		err := ApplyPVCModification(statefulSet, NewDataPVCCapacityChange(resource.MustParse(CapacityAfterUpsize)))
 
 		assert.NoError(t, err)
 		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
 			statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage])
+		assert.Equal(t, "old-storage-class", *statefulSet.Spec.VolumeClaimTemplates[0].Spec.StorageClassName)
+		assert.Equal(t, string(toJson(t, removeAnnotations(statefulSet.DeepCopy()))), unzip(statefulSet.Annotations[OldStsKey]))
+	})
+
+	t.Run("old sts exists - should apply new storageClass to current AND old spec", func(t *testing.T) {
+		statefulSet := getStsBeforeChange()
+		statefulSet.Annotations = map[string]string{
+			OldStsKey: string(toJson(t, statefulSet)),
+		}
+
+		err := ApplyPVCModification(statefulSet, NewDataPVCConfigMigrationChange("new-sc", resource.MustParse(InitialCapacity)))
+
+		assert.NoError(t, err)
+		assert.Equal(t, resource.MustParse(InitialCapacity),
+			statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage])
+		assert.Equal(t, "new-sc", *statefulSet.Spec.VolumeClaimTemplates[0].Spec.StorageClassName)
+		assert.Equal(t, string(toJson(t, removeAnnotations(statefulSet.DeepCopy()))), unzip(statefulSet.Annotations[OldStsKey]))
+	})
+
+	t.Run("old sts exists - should apply new capacity and storageClass to current AND old spec", func(t *testing.T) {
+		statefulSet := getStsBeforeChange()
+		statefulSet.Annotations = map[string]string{
+			OldStsKey: string(toJson(t, statefulSet)),
+		}
+
+		err := ApplyPVCModification(statefulSet, NewDataPVCConfigMigrationChange("new-sc", resource.MustParse(CapacityAfterUpsize)))
+
+		assert.NoError(t, err)
+		assert.Equal(t, resource.MustParse(CapacityAfterUpsize),
+			statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage])
+		assert.Equal(t, "new-sc", *statefulSet.Spec.VolumeClaimTemplates[0].Spec.StorageClassName)
 		assert.Equal(t, string(toJson(t, removeAnnotations(statefulSet.DeepCopy()))), unzip(statefulSet.Annotations[OldStsKey]))
 	})
 }
@@ -116,7 +153,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			LivingStatefulSetStub: &appsv1.StatefulSet{},
 		}
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), nil)
+		result := RecreateStatefulSetWithDataConfig(testCtx, rack, NewDataPVCCapacityChange(resource.MustParse("15Gi")), nil)
 
 		assert.False(t, result.HasError())
 		assert.NoError(t, result.Error())
@@ -130,7 +167,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			},
 		}
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), nil)
+		result := RecreateStatefulSetWithDataConfig(testCtx, rack, NewDataPVCCapacityChange(resource.MustParse("15Gi")), nil)
 
 		assert.True(t, result.HasError())
 		assert.Contains(t, result.Error().Error(), "cannot unmarshall snapshotted statefulSet for storage upsize")
@@ -142,7 +179,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1", Namespace: "default"},
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-					pvc("some other pvc", "9Gi"),
+					stu.Pvc("some other pvc", "9Gi"),
 				},
 			},
 		}))
@@ -152,7 +189,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			},
 		}
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), nil)
+		result := RecreateStatefulSetWithDataConfig(testCtx, rack, NewDataPVCCapacityChange(resource.MustParse("15Gi")), nil)
 
 		assert.True(t, result.HasError())
 		assert.Contains(t, result.Error().Error(), "no data pvc found in statefulSet dc1-rack1")
@@ -164,7 +201,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1", Namespace: "default"},
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-					pvc(consts.DataPVCName, "9Gi"),
+					stu.Pvc(consts.DataPVCName, "9Gi"),
 				},
 			},
 		}))
@@ -175,7 +212,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 		}
 		cl := fake.NewClientBuilder().Build()
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), sts.NewClient(cl))
+		result := RecreateStatefulSetWithDataConfig(testCtx, rack, NewDataPVCCapacityChange(resource.MustParse("15Gi")), sts.NewClient(cl))
 
 		assert.False(t, result.HasError())
 		assert.NoError(t, result.Error())
@@ -191,7 +228,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "dc1-rack1", Namespace: "default"},
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-					pvc(consts.DataPVCName, "9Gi"),
+					stu.Pvc(consts.DataPVCName, "9Gi"),
 				},
 			},
 		}))
@@ -206,7 +243,7 @@ func Test_recreateStatefulSetWithNewCapacity(t *testing.T) {
 			},
 		})
 
-		result := recreateStatefulSetWithNewCapacity(testCtx, rack, resource.MustParse("15Gi"), sts.NewClient(cl))
+		result := RecreateStatefulSetWithDataConfig(testCtx, rack, NewDataPVCCapacityChange(resource.MustParse("15Gi")), sts.NewClient(cl))
 
 		assert.True(t, result.HasError())
 		assert.Contains(t, result.Error().Error(), "creation failed")

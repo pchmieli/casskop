@@ -33,7 +33,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -46,29 +45,6 @@ var (
 
 func defaultRetryInterval() time.Duration {
 	return time.Second
-}
-
-// GetStatefulSet return the Statefulset name from the cluster in the namespace
-func (rcc *CassandraClusterReconciler) GetStatefulSet(ctx context.Context, namespace, name string) (*appsv1.StatefulSet, error) {
-
-	ss := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-	}
-	return ss, rcc.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, ss)
-}
-
-func (rcc *CassandraClusterReconciler) DeleteStatefulSet(ctx context.Context, namespace, name string) error {
-
-	ss := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-	}
-	return rcc.Client.Delete(ctx, ss)
 }
 
 // UpdateStatefulSet updates an existing statefulset ss
@@ -268,6 +244,7 @@ func (rcc *CassandraClusterReconciler) CreateOrUpdateStatefulSet(ctx context.Con
 	}
 
 	rcc.RevertAnyStorageUpsizeBeyondUpsizeAction(completeDcRackName, dcRackStatus, statefulSet)
+	rcc.RevertAnyStorageMigrationBeyondMigrationAction(completeDcRackName, dcRackStatus, statefulSet)
 
 	if dcRackStatus.CassandraLastAction.Name == api.ActionRollingRestart.Name &&
 		dcRackStatus.CassandraLastAction.Status == api.StatusToDo {

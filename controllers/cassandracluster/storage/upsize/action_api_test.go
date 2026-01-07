@@ -5,6 +5,7 @@ import (
 
 	v2 "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/consts"
+	stu "github.com/cscetbon/casskop/controllers/cassandracluster/storage/testutils"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view/stub"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,10 +20,10 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 
 	t.Run("upsize action in-progress, do not revert upsize", func(t *testing.T) {
 		currentSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, InitialCapacity),
+			stu.Pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 		newSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, CapacityAfterUpsize),
+			stu.Pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
 			LivingStatefulSetStub: currentSts.DeepCopy(),
@@ -43,10 +44,10 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 
 	t.Run("upsize action in-progress, sts resized already, nothing to do", func(t *testing.T) {
 		currentSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, CapacityAfterUpsize),
+			stu.Pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		newSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, CapacityAfterUpsize),
+			stu.Pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
 			LivingStatefulSetStub: currentSts.DeepCopy(),
@@ -67,10 +68,10 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 
 	t.Run("no upsize requested, nothing changes", func(t *testing.T) {
 		currentSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, InitialCapacity),
+			stu.Pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 		newSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, InitialCapacity),
+			stu.Pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 		rack := stub.RackView{
 			LivingStatefulSetStub: currentSts.DeepCopy(),
@@ -88,10 +89,10 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 
 	t.Run("upsize requested but action not started yet, revert change", func(t *testing.T) {
 		currentSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, InitialCapacity),
+			stu.Pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 		newSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, CapacityAfterUpsize),
+			stu.Pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
 			LivingStatefulSetStub: currentSts.DeepCopy(),
@@ -112,10 +113,10 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 
 	t.Run("upsize requested but action not started yet (previous upsize done), revert change", func(t *testing.T) {
 		currentSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, InitialCapacity),
+			stu.Pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 		newSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, CapacityAfterUpsize),
+			stu.Pvc(consts.DataPVCName, CapacityAfterUpsize),
 		}}}
 		rack := stub.RackView{
 			LivingStatefulSetStub: currentSts.DeepCopy(),
@@ -136,7 +137,7 @@ func TestRevertAnyStorageUpsizeBeyondUpsizeAction(t *testing.T) {
 
 	t.Run("handle unspecified resources", func(t *testing.T) {
 		currentSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-			pvc(consts.DataPVCName, InitialCapacity),
+			stu.Pvc(consts.DataPVCName, InitialCapacity),
 		}}}
 		newSts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 			pvcWithoutSpecifiedResources(consts.DataPVCName),

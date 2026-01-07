@@ -6,6 +6,7 @@ import (
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/pods"
 	as "github.com/cscetbon/casskop/controllers/cassandracluster/storage/actionstep"
+	sc "github.com/cscetbon/casskop/controllers/cassandracluster/storage/change"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/view"
@@ -15,8 +16,10 @@ import (
 )
 
 func ShouldBeStarted(rack view.RackView, requestedCapacity string) bool {
-	requested := silentParseResourceQuantity(requestedCapacity)
-	_, current := findDataCapacity(rack.LivingStatefulSet().Spec.VolumeClaimTemplates)
+	requested := sc.SilentParseResourceQuantity(requestedCapacity)
+	_, current := sc.FindDataCapacity(rack.LivingStatefulSet().Spec.VolumeClaimTemplates)
+
+	//TODO: should allow only for storage upsize (remember about unit tests)
 	if !requested.Equal(current) {
 		rack.Log().Infof("Storage upsize should be started: ask %v and have %v", requested, current)
 		return true
@@ -25,7 +28,7 @@ func ShouldBeStarted(rack view.RackView, requestedCapacity string) bool {
 }
 
 func Start(rack view.RackView) {
-	startUpsizeAction(rack)
+	sc.StartAction(rack, api.ActionStorageUpsize)
 }
 
 func IsStarted(dcRackStatus *api.CassandraRackStatus) bool {
@@ -43,12 +46,15 @@ func Reconcile(ctx context.Context, cc *api.CassandraCluster, rack view.RackView
 	storageStateClient storagestateclient.StorageStateClient, stsClient sts.StsClient, podsClient pods.PodsClient) error {
 
 	dataPVCs := make([]corev1.PersistentVolumeClaim, 0)
+	dataConfigChange := sc.NewDataPVCCapacityChange(newDataCapacity)
 
 	steps := []func() as.StepResult{
-		func() as.StepResult { return makeOldStatefulSetSnapshot(rack) },
-		func() as.StepResult { return removeStatefulSetOrphan(ctx, cc, rack, stsClient) },
-		func() as.StepResult { return recreateStatefulSetWithNewCapacity(ctx, rack, newDataCapacity, stsClient) },
-		func() as.StepResult { return fetchDataPvcs(ctx, cc, rack, storageStateClient, &dataPVCs) },
+		func() as.StepResult { return sc.MakeOldStatefulSetSnapshot(rack) },
+		func() as.StepResult { return sc.RemoveStatefulSetOrphan(ctx, cc, rack, dataConfigChange, stsClient) },
+		func() as.StepResult {
+			return sc.RecreateStatefulSetWithDataConfig(ctx, rack, dataConfigChange, stsClient)
+		},
+		func() as.StepResult { return sc.FetchDataPvcs(ctx, cc, rack, storageStateClient, &dataPVCs) },
 		func() as.StepResult { return ensureAllPVCsHaveNewCapacity(ctx, cc, dataPVCs, rack, storageStateClient) },
 		func() as.StepResult { return waitTillAllFilesystemsHaveNewCapacity(cc, dataPVCs, rack) },
 		func() as.StepResult { return waitTillStatefulSetAndAllPodsAreReady(ctx, cc, rack, podsClient) },
@@ -68,8 +74,8 @@ func Reconcile(ctx context.Context, cc *api.CassandraCluster, rack view.RackView
 // current action should finish, then upsize action should be started and then these changes should be applied
 func RevertAnyStorageUpsizeBeyondUpsizeAction(rack view.RackView, newStatefulSet *appsv1.StatefulSet) {
 	if !IsStarted(rack.RackStatus()) {
-		_, current := findDataCapacity(rack.LivingStatefulSet().Spec.VolumeClaimTemplates)
-		index, requested := findDataCapacity(newStatefulSet.Spec.VolumeClaimTemplates)
+		_, current := sc.FindDataCapacity(rack.LivingStatefulSet().Spec.VolumeClaimTemplates)
+		index, requested := sc.FindDataCapacity(newStatefulSet.Spec.VolumeClaimTemplates)
 		if !requested.Equal(current) {
 			dataPvcResources := &newStatefulSet.Spec.VolumeClaimTemplates[index].Spec.Resources
 			if dataPvcResources.Requests == nil {

@@ -1,10 +1,8 @@
 package change
 
-import "k8s.io/apimachinery/pkg/api/resource"
-
 func AnalyzeDataCapacityChange(oldCapacity, newCapacity string) CapacityChange {
-	oldParsed := silentParseResourceQuantity(oldCapacity)
-	newParsed := silentParseResourceQuantity(newCapacity)
+	oldParsed := SilentParseResourceQuantity(oldCapacity)
+	newParsed := SilentParseResourceQuantity(newCapacity)
 
 	if oldCapacity == newCapacity {
 		return CapacityNoChange
@@ -21,7 +19,6 @@ func AnalyzeDataCapacityChange(oldCapacity, newCapacity string) CapacityChange {
 	}
 
 	return CapacityDownsize
-
 }
 
 type CapacityChange int
@@ -32,8 +29,3 @@ const (
 	CapacityUpsize
 	CapacityDownsize
 )
-
-func silentParseResourceQuantity(qs string) resource.Quantity {
-	q, _ := resource.ParseQuantity(qs)
-	return q
-}

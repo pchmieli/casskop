@@ -20,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// TODO: possible duplicate with storage migration/change
 func (rcc *CassandraClusterReconciler) deletePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim) error {
 	return rcc.Client.Delete(ctx, pvc)
 }

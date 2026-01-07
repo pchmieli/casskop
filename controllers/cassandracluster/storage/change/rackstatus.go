@@ -1,4 +1,4 @@
-package upsize
+package change
 
 import (
 	"errors"
@@ -12,11 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func isStatefulSetSnapshottedAlready(dcRackStatus *api.CassandraRackStatus) bool {
-	return dcRackStatus.StatefulSetSnapshotBeforeStorageResize != ""
-}
-
-func makeOldStatefulSetSnapshot(rack view.RackView) actionstep.StepResult {
+func MakeOldStatefulSetSnapshot(rack view.RackView) actionstep.StepResult {
 	if isStatefulSetSnapshottedAlready(rack.RackStatus()) {
 		return actionstep.Pass()
 	}
@@ -33,7 +29,11 @@ func makeOldStatefulSetSnapshot(rack view.RackView) actionstep.StepResult {
 	return actionstep.Break()
 }
 
-func unmarshallSnapshottedStatefulSet(rack view.RackView) (*appsv1.StatefulSet, error) {
+func isStatefulSetSnapshottedAlready(dcRackStatus *api.CassandraRackStatus) bool {
+	return dcRackStatus.StatefulSetSnapshotBeforeStorageResize != ""
+}
+
+func UnmarshallSnapshottedStatefulSet(rack view.RackView) (*appsv1.StatefulSet, error) {
 	marshalledStatefulSet := rack.RackStatus().StatefulSetSnapshotBeforeStorageResize
 	newStatefulSet := &appsv1.StatefulSet{}
 	err := json.Unmarshal([]byte(marshalledStatefulSet), newStatefulSet)
@@ -43,19 +43,21 @@ func unmarshallSnapshottedStatefulSet(rack view.RackView) (*appsv1.StatefulSet, 
 	return newStatefulSet, nil
 }
 
-func startUpsizeAction(rack view.RackView) {
+func StartAction(rack view.RackView, action api.ClusterStateInfo) {
 	lastAction := &rack.RackStatus().CassandraLastAction
 	rack.RackStatus().Phase = api.ClusterPhasePending.Name
 	lastAction.Status = api.StatusOngoing
-	lastAction.Name = api.ActionStorageUpsize.Name
+	lastAction.Name = action.Name
 	lastAction.StartTime = ptr.To(metav1.Now())
 	lastAction.EndTime = nil
 }
 
-func finalizeUpsizeAction(rackStatus *api.CassandraRackStatus) {
+func FinalizeMigrationAction(rackStatus *api.CassandraRackStatus, action api.ClusterStateInfo) actionstep.StepResult {
 	lastAction := &rackStatus.CassandraLastAction
 	lastAction.Status = api.StatusDone
-	lastAction.Name = api.ActionStorageUpsize.Name
+	lastAction.Name = action.Name
 	lastAction.EndTime = ptr.To(metav1.Now())
 	rackStatus.StatefulSetSnapshotBeforeStorageResize = ""
+	rackStatus.StorageMigrationState = nil
+	return actionstep.Pass()
 }

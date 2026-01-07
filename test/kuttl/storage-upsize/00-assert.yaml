@@ -1,3 +1,5 @@
+# TODO: new test needed for storage migration (k3d should be enough, no need for LVM)
+
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

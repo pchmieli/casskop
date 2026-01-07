@@ -20,6 +20,10 @@ type StorageStateClient interface {
 	GetPVC(ctx context.Context, namespace, name string) (*v1.PersistentVolumeClaim, error)
 	ListPVC(ctx context.Context, namespace string, selector map[string]string) (*v1.PersistentVolumeClaimList, error)
 	UpdatePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim) error
+	DeletePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim) error
+	CreatePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim) error
+	GetPV(ctx context.Context, name string) (*v1.PersistentVolume, error)
+	UpdatePV(ctx context.Context, pv *v1.PersistentVolume) error
 }
 
 var _ StorageStateClient = (*storageStateClient)(nil)
@@ -54,3 +58,26 @@ func (c *storageStateClient) ListPVC(ctx context.Context, namespace string,
 func (c *storageStateClient) UpdatePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim) error {
 	return c.k8sClient.Update(ctx, pvc)
 }
+
+func (c *storageStateClient) DeletePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim) error {
+	return c.k8sClient.Delete(ctx, pvc)
+}
+
+func (c *storageStateClient) CreatePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim) error {
+	return c.k8sClient.Create(ctx, pvc)
+}
+
+func (c *storageStateClient) GetPV(ctx context.Context, name string) (*v1.PersistentVolume, error) {
+	o := &v1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+	return o, c.k8sClient.Get(ctx, types.NamespacedName{Name: name}, o)
+}
+
+func (c *storageStateClient) UpdatePV(ctx context.Context, pv *v1.PersistentVolume) error {
+	return c.k8sClient.Update(ctx, pv)
+}
+
+//TODO: check for duplicates in rcc

@@ -11,6 +11,7 @@ Cluster Operations must only be triggered by a change made on the `CassandraClus
 
 Some updates in the `CassandraCluster` CRD object are forbidden and will be gently dismissed by CassKop:
 
+[//]: # TODO: update
 - `spec.dataCapacity` (volume shrinking is forbidden, but we support online volume expansion, see section StorageUpsize)
 - `spec.dataStorage`
 
@@ -897,6 +898,8 @@ Operation Isolation:
 - During an active storage resize, no other configuration changes are applied
 - However, such changes are not reverted from CR and will be processed after the resize completes
 - Conversely, when other operations are in progress, storage resize requests are queued until completion
+
+[//]: # TODO: describe new operation
 
 ### CorrectCRDConfig
 

@@ -5,6 +5,7 @@ import (
 
 	api "github.com/cscetbon/casskop/api/v2"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/pods"
+	storagemigration "github.com/cscetbon/casskop/controllers/cassandracluster/storage/migration"
 	storageupsize "github.com/cscetbon/casskop/controllers/cassandracluster/storage/upsize"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/sts"
@@ -18,6 +19,16 @@ func (rcc *CassandraClusterReconciler) RevertAnyStorageUpsizeBeyondUpsizeAction(
 	dcRackStatus *api.CassandraRackStatus, statefulSet *appsv1.StatefulSet) {
 
 	storageupsize.RevertAnyStorageUpsizeBeyondUpsizeAction(rcc.newRackView(completeDcRackName, dcRackStatus), statefulSet)
+}
+
+func (rcc *CassandraClusterReconciler) RevertAnyStorageMigrationBeyondMigrationAction(completeDcRackName api.CompleteRackName,
+	dcRackStatus *api.CassandraRackStatus, statefulSet *appsv1.StatefulSet) {
+
+	storagemigration.RevertAnyStorageMigrationBeyondMigrationAction(rcc.newRackView(completeDcRackName, dcRackStatus), statefulSet)
+}
+
+func (rcc *CassandraClusterReconciler) IsAnyStorageActionStarted(dcRackStatus *api.CassandraRackStatus) bool {
+	return rcc.IsStorageMigrationStarted(dcRackStatus) || rcc.IsStorageUpsizeStarted(dcRackStatus)
 }
 
 func (rcc *CassandraClusterReconciler) UpdateStatusIfStorageUpsize(completeDcRackName api.CompleteRackName,
@@ -59,6 +70,50 @@ func (rcc *CassandraClusterReconciler) ReconcileStorageUpsize(ctx context.Contex
 	var podsClient pods.PodsClient = rcc
 
 	return storageupsize.Reconcile(ctx, cc, rackView, newDataCapacity, storageStateClient, stsClient, podsClient)
+}
+
+func (rcc *CassandraClusterReconciler) UpdateStatusIfStorageMigration(completeDcRackName api.CompleteRackName,
+	status *api.CassandraClusterStatus) bool {
+
+	rackView := rcc.newRackView(completeDcRackName, status.GetCassandraRackStatus(completeDcRackName.DcRackName))
+	if rcc.shouldStorageMigrationBeStarted(rackView) {
+		rcc.startStorageMigration(rackView)
+		return true
+	}
+	return false
+}
+
+func (rcc *CassandraClusterReconciler) shouldStorageMigrationBeStarted(rackView view.RackView) bool {
+	capacity := rcc.cc.GetDataCapacityForDCName(rackView.DcName())
+	storageClass := rcc.cc.GetDataStorageClassForDCName(rackView.DcName())
+	return storagemigration.ShouldBeStarted(rackView, capacity, storageClass)
+}
+
+func (rcc *CassandraClusterReconciler) startStorageMigration(rackView view.RackView) {
+	storagemigration.Start(rackView)
+	ClusterPhaseMetric.set(api.ClusterPhasePending, rcc.cc.Name)
+	ClusterActionMetric.set(api.ActionStorageMigration, rcc.cc.Name)
+}
+
+func (rcc *CassandraClusterReconciler) IsStorageMigrationStarted(dcRackStatus *api.CassandraRackStatus) bool {
+	return storagemigration.IsStarted(dcRackStatus)
+}
+
+func (rcc *CassandraClusterReconciler) ReconcileStorageMigration(ctx context.Context, cc *api.CassandraCluster,
+	status *api.CassandraClusterStatus, completeDcRackName api.CompleteRackName) error {
+
+	status.GetCassandraRackStatus(completeDcRackName.DcRackName).Phase = api.ClusterPhasePending.Name
+	ClusterPhaseMetric.set(api.ClusterPhasePending, cc.Name)
+
+	newDataStorageClass := cc.GetDataStorageClassForDCName(completeDcRackName.DcName)
+	newDataCapacity := generateResourceQuantity(cc.GetDataCapacityForDCName(completeDcRackName.DcName))
+
+	rackView := rcc.newRackView(completeDcRackName, status.GetCassandraRackStatus(completeDcRackName.DcRackName))
+	var storageStateClient storagestateclient.StorageStateClient = rcc
+	var stsClient sts.StsClient = rcc
+	var podsClient pods.PodsClient = rcc
+
+	return storagemigration.Reconcile(ctx, cc, rackView, newDataStorageClass, newDataCapacity, storageStateClient, stsClient, podsClient)
 }
 
 func (rcc *CassandraClusterReconciler) newRackView(completeRackName api.CompleteRackName,

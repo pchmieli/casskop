@@ -1,0 +1,1 @@
+ps aux | sed -n 's/.*-Dcassandra\.replace_address_first_boot=\([0-9.]*\).*/Replace Address: \1/p'

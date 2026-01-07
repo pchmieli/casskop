@@ -99,6 +99,40 @@ const (
 	ContinueResyncLoop = false
 )
 
+// GetStorageMigrationPodLoadThreshold returns the pod load difference threshold as float64
+// Returns default value (20.0) if not set or on parse error
+func (cc *CassandraCluster) GetStorageMigrationPodLoadThreshold() float64 {
+	if cc.Spec.StorageMigrationPodLoadDifferenceThresholdPercent == nil {
+		return 20.0 // default
+	}
+
+	value, err := ParsePercentageString(*cc.Spec.StorageMigrationPodLoadDifferenceThresholdPercent)
+	if err != nil {
+		logrus.Warnf("Failed to parse StorageMigrationPodLoadDifferenceThresholdPercent '%s': %v, using default 20.0",
+			*cc.Spec.StorageMigrationPodLoadDifferenceThresholdPercent, err)
+		return 20.0
+	}
+
+	return value
+}
+
+// GetStorageMigrationOtherNodesLoadThreshold returns the other nodes load difference threshold as float64
+// Returns default value (5.0) if not set or on parse error
+func (cc *CassandraCluster) GetStorageMigrationOtherNodesLoadThreshold() float64 {
+	if cc.Spec.StorageMigrationOtherNodesLoadDifferenceThresholdPercent == nil {
+		return 5.0 // default
+	}
+
+	value, err := ParsePercentageString(*cc.Spec.StorageMigrationOtherNodesLoadDifferenceThresholdPercent)
+	if err != nil {
+		logrus.Warnf("Failed to parse StorageMigrationOtherNodesLoadDifferenceThresholdPercent '%s': %v, using default 5.0",
+			*cc.Spec.StorageMigrationOtherNodesLoadDifferenceThresholdPercent, err)
+		return 5.0
+	}
+
+	return value
+}
+
 // CheckDefaults checks that required fields haven't good values
 func (cc *CassandraCluster) CheckDefaults() {
 	ccs := &cc.Spec
@@ -840,6 +874,26 @@ type CassandraClusterSpec struct {
 	BackRestSidecar    *BackRestSidecar  `json:"backRestSidecar,omitempty"`
 	ServiceAccountName string            `json:"serviceAccountName,omitempty"`
 	JMXConfiguration   *JMXConfiguration `json:"jmxConfiguration,omitempty"`
+
+	// StorageMigrationPodLoadDifferenceThresholdPercent defines the maximum acceptable load difference (in %)
+	// for the migrated pod before and after migration.
+	// Must be specified as either:
+	//   - Percentage with % sign: "20%", "5.5%" (range 0-100%)
+	//   - Fraction without % sign: "0.2", "0.055" (range 0-1, interpreted as percentage)
+	// Default: "20%"
+	// +kubebuilder:default:="20%"
+	// +kubebuilder:validation:Pattern=`^(100(\.0+)?%|[0-9]{1,2}(\.[0-9]+)?%|0?\.[0-9]+)$`
+	StorageMigrationPodLoadDifferenceThresholdPercent *string `json:"storageMigrationPodLoadDifferenceThresholdPercent,omitempty"`
+
+	// StorageMigrationOtherNodesLoadDifferenceThresholdPercent defines the maximum acceptable load difference (in %)
+	// for other nodes during migration to detect cluster-wide imbalances.
+	// Must be specified as either:
+	//   - Percentage with % sign: "5%", "2.5%" (range 0-100%)
+	//   - Fraction without % sign: "0.05", "0.025" (range 0-1, interpreted as percentage)
+	// Default: "5%"
+	// +kubebuilder:default:="5%"
+	// +kubebuilder:validation:Pattern=`^(100(\.0+)?%|[0-9]{1,2}(\.[0-9]+)?%|0?\.[0-9]+)$`
+	StorageMigrationOtherNodesLoadDifferenceThresholdPercent *string `json:"storageMigrationOtherNodesLoadDifferenceThresholdPercent,omitempty"`
 }
 
 // JMXConfiguration defines Cassandra JMX variables configuration
@@ -974,6 +1028,63 @@ type CassandraRackStatus struct {
 	// StatefulSetSnapshotBeforeStorageResize is the StatefulSet snapshot taken before storage resize
 	// The purpose is to isolate the storage resize operation from other operations
 	StatefulSetSnapshotBeforeStorageResize string `json:"statefulSetSnapshotBeforeStorageResize,omitempty"`
+
+	StorageMigrationState *RackStorageMigrationState `json:"storageMigrationState,omitempty"`
+}
+
+type RackStorageMigrationState struct {
+	Pods                 map[string]PodStorageMigrationState `json:"pods,omitempty"`
+	StsDeletedWithOrphan bool                                `json:"stsDeletedWithOrphan,omitempty"`
+}
+
+// AllPodsMigrated returns true if all pods in the rack have been migrated
+func (r *RackStorageMigrationState) AllPodsMigrated() bool {
+	if r == nil || r.Pods == nil {
+		return false
+	}
+	for _, podState := range r.Pods {
+		if !podState.Migrated {
+			return false
+		}
+	}
+	return true
+}
+
+type PodStorageMigrationState struct {
+
+	//TODO: needed for whole-rack-at-once approach, maybe to be deleted eventually (before creating upstream PR)
+	RegularPvcDump string `json:"regularPvcDump,omitempty"`
+	TempPvcDump    string `json:"tempPvcDump,omitempty"`
+	OldPvName      string `json:"oldPvName,omitempty"`
+	NewPvName      string `json:"newPvName,omitempty"`
+
+	NewPvCapacity     string `json:"newPvCapacity,omitempty"`
+	NewPvStorageClass string `json:"newPvStorageClass,omitempty"`
+
+	PodTemplateDump string `json:"podTemplateDump,omitempty"` // JSON dump of pod template from StatefulSet
+
+	// Repair state (set during storage migration)
+	RepairTriggered bool   `json:"repairTriggered,omitempty"`
+	RepairCommandID string `json:"repairCommandId,omitempty"`
+	RepairStartTime string `json:"repairStartTime,omitempty"`
+	RepairCompleted bool   `json:"repairCompleted,omitempty"`
+
+	// Node replacement state (for replace_address_first_boot approach)
+	OldPodIP      string `json:"oldPodIp,omitempty"`
+	OldHostID     string `json:"oldHostId,omitempty"`
+	NewPodIP      string `json:"newPodIp,omitempty"`
+	NewHostID     string `json:"newHostId,omitempty"`
+	PodDeleted    bool   `json:"podDeleted,omitempty"`
+	OldPVCDeleted bool   `json:"oldPvcDeleted,omitempty"`
+	NewPVCCreated bool   `json:"newPvcCreated,omitempty"`
+	PodRecreated  bool   `json:"podRecreated,omitempty"` // Individual pod recreated (not whole STS)
+	Migrated      bool   `json:"migrated,omitempty"`
+
+	// Diagnostics: Token ranges and nodetool status captured before/after migration
+	TokenRangesBeforeMigration    string `json:"tokenRangesBeforeMigration,omitempty"`
+	TokenRangesAfterMigration     string `json:"tokenRangesAfterMigration,omitempty"`
+	NodetoolStatusBeforeMigration string `json:"nodetoolStatusBeforeMigration,omitempty"`
+	NodetoolStatusAfterMigration  string `json:"nodetoolStatusAfterMigration,omitempty"`
 }
 
 // CassandraClusterStatus defines Global state of CassandraCluster

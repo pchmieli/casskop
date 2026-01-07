@@ -157,11 +157,8 @@ func (rcc *CassandraClusterReconciler) CheckNonAllowedChanges(ctx context.Contex
 					oldCapacity, requestedCapacity)
 		case storagechange.CapacityDownsize:
 			logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dcName": dcName}).
-				Warningf("The Operator has refused the change on DataCapacity from [%s] to NewValue[%s]",
+				Infof("The Operator has accepted the DataCapacity downsize from [%s] to NewValue[%s]",
 					oldCapacity, requestedCapacity)
-			cc.Spec.DataCapacity = oldCRD.Spec.DataCapacity
-			cc.Spec.Topology.DC[dc].DataCapacity = oldCRD.Spec.Topology.DC[dc].DataCapacity
-			needUpdate = true
 		case storagechange.CapacitySyntacticChange:
 			logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dcName": dcName}).
 				Debugf("The Operator has ignored the change on DataCapacity from [%s] to NewValue[%s] "+
@@ -173,12 +170,13 @@ func (rcc *CassandraClusterReconciler) CheckNonAllowedChanges(ctx context.Contex
 		//DataStorage
 		if cc.GetDataStorageClassForDCName(dcName) != oldCRD.GetDataStorageClassForDCName(dcName) {
 			logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dcName": dcName}).
-				Warningf("The Operator has refused the change on DataStorageClass from [%s] to NewValue[%s]",
+				Infof("The Operator has accepted the change on DataStorageClass from [%s] to NewValue[%s]",
 					oldCRD.GetDataStorageClassForDCName(dcName), cc.GetDataStorageClassForDCName(dcName))
-			cc.Spec.DataStorageClass = oldCRD.Spec.DataStorageClass
-			cc.Spec.Topology.DC[dc].DataStorageClass = oldCRD.Spec.Topology.DC[dc].DataStorageClass
-			needUpdate = true
 		}
+
+		//TODO: check if storage class not empty (maybe check existence? but maybe we have no permissions; maybe checked already by CR validation rules)
+
+		//TODO: should we allow to change params after operation is started?
 	}
 
 	if needUpdate {
@@ -547,11 +545,14 @@ func (rcc *CassandraClusterReconciler) ReconcileRack(ctx context.Context, cc *ap
 					"dc-rack": dcRackName}).Errorf("ensureCassandraServiceMonitoring Error: %v", err)
 			}
 
-			if rcc.IsStorageUpsizeStarted(dcRackStatus) {
+			if rcc.IsAnyStorageActionStarted(dcRackStatus) {
+
+				//TODO: maybe extract 404 handling (might be generic)
+
 				if getStsErr != nil && !apierrors.IsNotFound(getStsErr) {
 					logrus.WithFields(logrus.Fields{"cluster": cc.Name, "dc-rack": dcRackName}).
-						Infof("cannot continue storage upsize because: failed to get cassandra's statefulset (%s) %v",
-							Name, getStsErr)
+						Infof("cannot continue %v because: failed to get cassandra's statefulset (%s) %v",
+							dcRackStatus.CassandraLastAction.Name, Name, getStsErr)
 					return nil
 				}
 				if getStsErr != nil && apierrors.IsNotFound(getStsErr) {
@@ -559,7 +560,12 @@ func (rcc *CassandraClusterReconciler) ReconcileRack(ctx context.Context, cc *ap
 				} else {
 					rcc.storedStatefulSet = storedStatefulSet
 				}
-				return rcc.ReconcileStorageUpsize(ctx, cc, status, completeDcRackName)
+
+				if rcc.IsStorageMigrationStarted(dcRackStatus) {
+					return rcc.ReconcileStorageMigration(ctx, cc, status, completeDcRackName)
+				} else {
+					return rcc.ReconcileStorageUpsize(ctx, cc, status, completeDcRackName)
+				}
 			}
 
 			breakLoop, err := rcc.ensureCassandraStatefulSet(ctx, cc, status, completeDcRackName, dc, rack)

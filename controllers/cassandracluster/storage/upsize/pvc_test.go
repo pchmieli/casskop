@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	api "github.com/cscetbon/casskop/api/v2"
+	stu "github.com/cscetbon/casskop/controllers/cassandracluster/storage/testutils"
 	"github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient"
 	storagestateclientmock "github.com/cscetbon/casskop/controllers/cassandracluster/storagestateclient/mock"
 	rackviewstub "github.com/cscetbon/casskop/controllers/cassandracluster/view/stub"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -25,9 +25,9 @@ var testCtx = context.Background()
 func Test_ensureAllPVCsHaveNewCapacity_happyPath(t *testing.T) {
 	const expectedCapacity = "25Gi"
 
-	dataPvc0 := pvc("data-dc-rack1-0", "10Gi")
-	dataPvc1 := pvc("data-dc-rack1-1", "25Gi")
-	dataPvc2 := pvc("data-dc-rack1-2", "")
+	dataPvc0 := stu.Pvc("data-dc-rack1-0", "10Gi")
+	dataPvc1 := stu.Pvc("data-dc-rack1-1", "25Gi")
+	dataPvc2 := stu.Pvc("data-dc-rack1-2", "")
 	pvcs := []corev1.PersistentVolumeClaim{dataPvc0, dataPvc1, dataPvc2}
 	cc := &api.CassandraCluster{
 		Spec: api.CassandraClusterSpec{
@@ -54,9 +54,9 @@ func Test_ensureAllPVCsHaveNewCapacity_happyPath(t *testing.T) {
 	})
 
 	t.Run("should handle PVC already at expected capacity", func(t *testing.T) {
-		dataPvc0 = pvc("data-dc-rack1-0", expectedCapacity)
-		dataPvc1 = pvc("data-dc-rack1-1", expectedCapacity)
-		dataPvc2 = pvc("data-dc-rack1-2", expectedCapacity)
+		dataPvc0 = stu.Pvc("data-dc-rack1-0", expectedCapacity)
+		dataPvc1 = stu.Pvc("data-dc-rack1-1", expectedCapacity)
+		dataPvc2 = stu.Pvc("data-dc-rack1-2", expectedCapacity)
 		assert.NoError(t, cl.Update(testCtx, &dataPvc0))
 		assert.NoError(t, cl.Update(testCtx, &dataPvc1))
 		assert.NoError(t, cl.Update(testCtx, &dataPvc2))
@@ -75,9 +75,9 @@ func Test_ensureAllPVCsHaveNewCapacity_happyPath(t *testing.T) {
 func Test_ensureAllPVCsHaveNewCapacity_errors(t *testing.T) {
 	const expectedCapacity = "25Gi"
 
-	dataPvc0 := pvc("data-dc-rack1-0", "10Gi")
-	dataPvc1 := pvc("data-dc-rack1-1", "25Gi")
-	dataPvc2 := pvc("data-dc-rack1-2", "")
+	dataPvc0 := stu.Pvc("data-dc-rack1-0", "10Gi")
+	dataPvc1 := stu.Pvc("data-dc-rack1-1", "25Gi")
+	dataPvc2 := stu.Pvc("data-dc-rack1-2", "")
 	pvcs := []corev1.PersistentVolumeClaim{dataPvc0, dataPvc1, dataPvc2}
 	cc := &api.CassandraCluster{
 		Spec: api.CassandraClusterSpec{
@@ -94,26 +94,6 @@ func Test_ensureAllPVCsHaveNewCapacity_errors(t *testing.T) {
 
 	assert.True(t, res.HasError())
 	assert.EqualError(t, res.Error(), "update failed; update failed")
-}
-
-func pvc(name, capacity string) corev1.PersistentVolumeClaim {
-	var resources corev1.ResourceList
-	if capacity != "" {
-		resources = corev1.ResourceList{
-			corev1.ResourceStorage: resource.MustParse(capacity),
-		}
-	}
-	return corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: resources,
-			},
-		},
-	}
 }
 
 func pvcWithoutSpecifiedResources(name string) corev1.PersistentVolumeClaim {

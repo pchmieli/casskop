@@ -12,4 +12,8 @@ rules:
 - apiGroups: [""]
   resources: ["nodes"]
   verbs: ["get", "watch", "list"]
+{{/*TODO: to be considered if we want to check ReclaimPolicy in casskop or leave it to user*/}}
+- apiGroups: [ "" ]
+  resources: [ "persistentvolumes" ]
+  verbs: [ "get", "watch", "list", "update" ]
 {{- end }}

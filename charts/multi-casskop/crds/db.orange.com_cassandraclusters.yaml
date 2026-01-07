@@ -2095,6 +2095,28 @@ spec:
                           volumeName:
                             description: volumeName is the binding reference to the PersistentVolume backing this claim.
                             type: string
+                storageMigrationOtherNodesLoadDifferenceThresholdPercent:
+                  description: |-
+                    StorageMigrationOtherNodesLoadDifferenceThresholdPercent defines the maximum acceptable load difference (in %)
+                    for other nodes during migration to detect cluster-wide imbalances.
+                    Must be specified as either:
+                      - Percentage with % sign: "5%", "2.5%" (range 0-100%)
+                      - Fraction without % sign: "0.05", "0.025" (range 0-1, interpreted as percentage)
+                    Default: "5%"
+                  type: string
+                  default: 5%
+                  pattern: ^(100(\.0+)?%|[0-9]{1,2}(\.[0-9]+)?%|0?\.[0-9]+)$
+                storageMigrationPodLoadDifferenceThresholdPercent:
+                  description: |-
+                    StorageMigrationPodLoadDifferenceThresholdPercent defines the maximum acceptable load difference (in %)
+                    for the migrated pod before and after migration.
+                    Must be specified as either:
+                      - Percentage with % sign: "20%", "5.5%" (range 0-100%)
+                      - Fraction without % sign: "0.2", "0.055" (range 0-1, interpreted as percentage)
+                    Default: "20%"
+                  type: string
+                  default: 20%
+                  pattern: ^(100(\.0+)?%|[0-9]{1,2}(\.[0-9]+)?%|0?\.[0-9]+)$
                 topology:
                   description: Topology to create Cassandra DC and Racks and to target appropriate Kubernetes Nodes
                   type: object
@@ -2313,6 +2335,67 @@ spec:
                           StatefulSetSnapshotBeforeStorageResize is the StatefulSet snapshot taken before storage resize
                           The purpose is to isolate the storage resize operation from other operations
                         type: string
+                      storageMigrationState:
+                        type: object
+                        properties:
+                          pods:
+                            type: object
+                            additionalProperties:
+                              type: object
+                              properties:
+                                migrated:
+                                  type: boolean
+                                newHostId:
+                                  type: string
+                                newPodIp:
+                                  type: string
+                                newPvCapacity:
+                                  type: string
+                                newPvName:
+                                  type: string
+                                newPvStorageClass:
+                                  type: string
+                                newPvcCreated:
+                                  type: boolean
+                                nodetoolStatusAfterMigration:
+                                  type: string
+                                nodetoolStatusBeforeMigration:
+                                  type: string
+                                oldHostId:
+                                  type: string
+                                oldPodIp:
+                                  description: Node replacement state (for replace_address_first_boot approach)
+                                  type: string
+                                oldPvName:
+                                  type: string
+                                oldPvcDeleted:
+                                  type: boolean
+                                podDeleted:
+                                  type: boolean
+                                podRecreated:
+                                  type: boolean
+                                podTemplateDump:
+                                  type: string
+                                regularPvcDump:
+                                  type: string
+                                repairCommandId:
+                                  type: string
+                                repairCompleted:
+                                  type: boolean
+                                repairStartTime:
+                                  type: string
+                                repairTriggered:
+                                  description: Repair state (set during storage migration)
+                                  type: boolean
+                                tempPvcDump:
+                                  type: string
+                                tokenRangesAfterMigration:
+                                  type: string
+                                tokenRangesBeforeMigration:
+                                  description: 'Diagnostics: Token ranges and nodetool status captured before/after migration'
+                                  type: string
+                          stsDeletedWithOrphan:
+                            type: boolean
                 lastClusterAction:
                   description: Store last action at cluster level
                   type: string
