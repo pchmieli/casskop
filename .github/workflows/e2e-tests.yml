@@ -109,6 +109,11 @@ jobs:
           version: v5.4.0
           options: --image rancher/k3s:v1.24.13-k3s1
 
+      - name: Wait for k3d cluster to be ready
+        run: |
+          kubectl wait --for=condition=ready node --all --timeout=300s
+          kubectl wait --for=condition=ready pod -n kube-system -l k8s-app=kube-dns --timeout=300s
+
       - name: Setup LVM on k3d cluster
         if: matrix.test-name == 'storage-upsize'
         run: |
