@@ -1,0 +1,331 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lvm-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lvm-installer
+  namespace: lvm-system
+  labels:
+    app: lvm-installer
+spec:
+  selector:
+    matchLabels:
+      app: lvm-installer
+  template:
+    metadata:
+      labels:
+        app: lvm-installer
+    spec:
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
+      tolerations:
+        - operator: Exists
+      initContainers:
+        # Init container to install LVM tools from Alpine repository
+        - name: install-lvm-tools
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Installing LVM tools and dependencies..."
+              
+              # Install packages in the container
+              apk add --no-cache \
+                lvm2 \
+                device-mapper \
+                thin-provisioning-tools \
+                e2fsprogs \
+                xfsprogs \
+                util-linux \
+                kmod \
+                libaio
+              
+              echo "Copying binaries to shared volume..."
+              
+              # Create target directories in shared volume
+              mkdir -p /lvm-tools/bin
+              mkdir -p /lvm-tools/sbin
+              mkdir -p /lvm-tools/lib
+              
+              # Copy LVM binaries
+              for bin in lvm pvscan pvs pvdisplay pvcreate pvremove \
+                         vgscan vgs vgdisplay vgcreate vgremove vgextend \
+                         lvscan lvs lvdisplay lvcreate lvremove lvextend lvresize \
+                         dmsetup; do
+                if [ -f /sbin/$bin ]; then
+                  cp -f /sbin/$bin /lvm-tools/sbin/ 2>/dev/null || true
+                fi
+                if [ -f /usr/sbin/$bin ]; then
+                  cp -f /usr/sbin/$bin /lvm-tools/sbin/ 2>/dev/null || true
+                fi
+              done
+              
+              # Copy device-mapper tools
+              for bin in thin_check thin_dump thin_metadata_size thin_repair thin_restore \
+                         cache_check cache_dump cache_metadata_size cache_repair cache_restore \
+                         pdata_tools; do
+                if [ -f /sbin/$bin ]; then
+                  cp -f /sbin/$bin /lvm-tools/sbin/ 2>/dev/null || true
+                fi
+                if [ -f /usr/sbin/$bin ]; then
+                  cp -f /usr/sbin/$bin /lvm-tools/sbin/ 2>/dev/null || true
+                fi
+              done
+              
+              # Copy filesystem tools
+              for bin in mkfs.ext4 mkfs.ext3 mkfs.ext2 resize2fs e2fsck \
+                         mkfs.xfs xfs_growfs xfs_repair; do
+                if [ -f /sbin/$bin ]; then
+                  cp -f /sbin/$bin /lvm-tools/sbin/ 2>/dev/null || true
+                fi
+                if [ -f /usr/sbin/$bin ]; then
+                  cp -f /usr/sbin/$bin /lvm-tools/sbin/ 2>/dev/null || true
+                fi
+              done
+              
+              # Copy required libraries AND the musl dynamic linker
+              echo "Copying shared libraries and musl dynamic linker..."
+              
+              # First, copy the musl dynamic linker (critical!)
+              cp -f /lib/ld-musl-*.so.1 /lvm-tools/lib/ 2>/dev/null || true
+              
+              for lib in /lib/*.so* /usr/lib/*.so*; do
+                if [ -f "$lib" ]; then
+                  # Only copy actual files, not symlinks for now
+                  if [ ! -L "$lib" ]; then
+                    cp -f "$lib" /lvm-tools/lib/ 2>/dev/null || true
+                  fi
+                fi
+              done
+              
+              # Now copy symlinks
+              for lib in /lib/*.so* /usr/lib/*.so*; do
+                if [ -L "$lib" ]; then
+                  cp -Pf "$lib" /lvm-tools/lib/ 2>/dev/null || true
+                fi
+              done
+              
+              # Verify critical libraries are present
+              for critical_lib in libaio.so.1 libdevmapper.so.1.02 libblkid.so.1 libuuid.so.1; do
+                if [ ! -e "/lvm-tools/lib/$critical_lib" ]; then
+                  echo "WARNING: Critical library $critical_lib not found, searching..."
+                  find /lib /usr/lib -name "$critical_lib*" -exec cp -Pf {} /lvm-tools/lib/ \; 2>/dev/null || true
+                fi
+              done
+              
+              echo "Setting permissions..."
+              chmod +x /lvm-tools/sbin/* 2>/dev/null || true
+              chmod +x /lvm-tools/bin/* 2>/dev/null || true
+              
+              echo "LVM tools installation complete!"
+              echo "Installed binaries:"
+              ls -lh /lvm-tools/sbin/ | grep -E "lvm|pv|vg|lv|dm" || true
+
+          volumeMounts:
+            - name: lvm-tools
+              mountPath: /lvm-tools
+          securityContext:
+            privileged: true
+      containers:
+        # Main container that sets up LVM and keeps running
+        - name: lvm-setup
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              
+              echo "Setting up LVM environment on node $(hostname)..."
+              
+              # First, copy the LVM tools to the host filesystem
+              echo "Copying LVM tools to host filesystem..."
+              nsenter --mount=/proc/1/ns/mnt -- sh -c '
+                mkdir -p /usr/local/sbin /usr/local/bin /usr/local/lib /lib
+              '
+              
+              # Copy the musl dynamic linker to /lib on the host (critical for Alpine binaries!)
+              echo "Installing musl dynamic linker..."
+              if [ -f /lvm-tools/lib/ld-musl-x86_64.so.1 ]; then
+                cp -f /lvm-tools/lib/ld-musl-x86_64.so.1 /host/lib/ 2>/dev/null || true
+                echo "Musl linker copied to /lib"
+              fi
+              
+              # Copy binaries to host
+              if [ -d /lvm-tools/sbin ]; then
+                cp -rf /lvm-tools/sbin/* /host/usr/local/sbin/ 2>/dev/null || true
+              fi
+              
+              if [ -d /lvm-tools/bin ]; then
+                cp -rf /lvm-tools/bin/* /host/usr/local/bin/ 2>/dev/null || true
+              fi
+              
+              # Copy libraries to host
+              if [ -d /lvm-tools/lib ]; then
+                cp -rf /lvm-tools/lib/* /host/usr/local/lib/ 2>/dev/null || true
+              fi
+              
+              echo "Setting executable permissions..."
+              chmod +x /host/usr/local/sbin/* 2>/dev/null || true
+              chmod +x /host/usr/local/bin/* 2>/dev/null || true
+              
+              echo "Verifying copied files..."
+              ls -lh /host/usr/local/sbin/ | head -n 20
+              
+              # Configure library path in host namespace
+              nsenter --mount=/proc/1/ns/mnt -- sh -c '
+                # Add our library path to ld.so.conf
+                mkdir -p /etc/ld.so.conf.d
+                echo "/usr/local/lib" > /etc/ld.so.conf.d/lvm-tools.conf
+              
+                # Try to run ldconfig if available
+                if command -v ldconfig >/dev/null 2>&1; then
+                  ldconfig 2>/dev/null || true
+                fi
+              '
+              
+              # Test LVM commands in host namespace
+              echo "Testing LVM installation..."
+              nsenter --mount=/proc/1/ns/mnt -- sh -c '
+                export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+                export PATH=/usr/local/sbin:/usr/local/bin:$PATH
+              
+                echo "=== Debug Information ==="
+                echo "PATH: $PATH"
+                echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+                echo ""
+                echo "Checking lvm binary:"
+                which lvm || echo "lvm not found in PATH"
+                ls -lh /usr/local/sbin/lvm 2>/dev/null || echo "lvm not found at /usr/local/sbin/lvm"
+                echo ""
+                echo "Checking for musl dynamic linker:"
+                ls -lh /lib/ld-musl-*.so.1 2>/dev/null || echo "musl linker not found in /lib"
+                echo ""
+                echo "Checking binary interpreter (what dynamic linker it needs):"
+                if command -v readelf >/dev/null 2>&1; then
+                  readelf -l /usr/local/sbin/lvm 2>/dev/null | grep interpreter || echo "readelf failed"
+                elif command -v file >/dev/null 2>&1; then
+                  file /usr/local/sbin/lvm
+                else
+                  echo "Neither readelf nor file command available"
+                fi
+                echo ""
+                echo "Testing lvm with verbose output:"
+                set -x
+                lvm version 2>&1 || {
+                  echo ""
+                  echo "ERROR: LVM command failed with exit code $?"
+                  echo ""
+                  echo "Checking if interpreter exists:"
+                  if command -v readelf >/dev/null 2>&1; then
+                    INTERP=$(readelf -l /usr/local/sbin/lvm 2>/dev/null | grep interpreter | sed "s/.*\[\(.*\)\]/\1/")
+                    echo "Required interpreter: $INTERP"
+                    ls -lh "$INTERP" 2>/dev/null || echo "Interpreter $INTERP NOT FOUND"
+                  fi
+                  echo ""
+                  echo "Trying to get more details with ldd:"
+                  ldd /usr/local/sbin/lvm 2>&1 || echo "ldd failed or not available"
+                  echo ""
+                  echo "Checking if required libraries exist:"
+                  ls -lh /usr/local/lib/libaio* 2>/dev/null || echo "libaio not found"
+                  ls -lh /usr/local/lib/libdevmapper* 2>/dev/null || echo "libdevmapper not found"
+                  ls -lh /usr/local/lib/libblkid* 2>/dev/null || echo "libblkid not found"
+                  echo ""
+                  echo "Trying to run lvm with explicit linker:"
+                  if [ -f /lib/ld-musl-x86_64.so.1 ]; then
+                    /lib/ld-musl-x86_64.so.1 --library-path /usr/local/lib /usr/local/sbin/lvm version 2>&1 || echo "Failed with explicit linker"
+                  fi
+                  exit 1
+                }
+                set +x
+              
+                echo "✅ LVM tools are functional"
+              '
+              
+              # Setup LVM volumes in host namespace
+              echo "Setting up LVM volumes..."
+              nsenter --mount=/proc/1/ns/mnt -- sh -c '
+                export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+                export PATH=/usr/local/sbin:/usr/local/bin:$PATH
+              
+                # Ensure mount point exists
+                mkdir -p /mnt/disks
+              
+                # Create a 10GB loop device (simulating a physical disk)
+                if [ ! -f /mnt/disks/disk.img ]; then
+                  echo "Creating disk image..."
+                  truncate -s 10G /mnt/disks/disk.img
+                fi
+              
+                # Setup loop device
+                LOOP_DEVICE=$(losetup -f)
+                if ! losetup $LOOP_DEVICE /mnt/disks/disk.img 2>/dev/null; then
+                  echo "Loop device already set up or error occurred"
+                  LOOP_DEVICE=$(losetup -j /mnt/disks/disk.img | cut -d: -f1)
+                fi
+              
+                echo "Using loop device: $LOOP_DEVICE"
+              
+                # Check if PV already exists
+                if ! pvs $LOOP_DEVICE 2>/dev/null; then
+                  echo "Creating LVM physical volume..."
+                  pvcreate $LOOP_DEVICE
+                else
+                  echo "Physical volume already exists"
+                fi
+              
+                # Check if VG already exists
+                if ! vgs lvmvg 2>/dev/null; then
+                  echo "Creating LVM volume group: lvmvg"
+                  vgcreate lvmvg $LOOP_DEVICE
+                else
+                  echo "Volume group lvmvg already exists"
+                fi
+              
+                echo "✅ LVM setup complete on $(hostname)"
+                vgs
+              '
+              
+              # Keep container running and monitor LVM
+              echo "LVM installer ready. Monitoring..."
+              while true; do
+                sleep 300
+                nsenter --mount=/proc/1/ns/mnt -- sh -c '
+                  export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+                  export PATH=/usr/local/sbin:/usr/local/bin:$PATH
+                  echo "LVM status check at $(date):"
+                  vgs 2>/dev/null || echo "VG check failed"
+                ' || true
+              done
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+            - name: proc
+              mountPath: /proc
+            - name: lvm-tools
+              mountPath: /lvm-tools
+          securityContext:
+            privileged: true
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: lvm-tools
+          emptyDir: {}
