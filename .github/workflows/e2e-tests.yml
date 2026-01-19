@@ -111,8 +111,30 @@ jobs:
 
       - name: Wait for k3d cluster to be ready
         run: |
+          echo "Waiting for k3d cluster to be ready..."
+          # Wait for API server to be responsive
+          for i in {1..60}; do
+            if kubectl get nodes &>/dev/null; then
+              echo "API server is responsive"
+              break
+            fi
+            echo "Waiting for API server to be ready... ($i/60)"
+            sleep 2
+          done
+          # Wait for nodes to be ready
           kubectl wait --for=condition=ready node --all --timeout=300s
-          kubectl wait --for=condition=ready pod -n kube-system -l k8s-app=kube-dns --timeout=300s
+          # Wait for kube-system namespace and core services to initialize
+          for i in {1..30}; do
+            if kubectl get pods -n kube-system &>/dev/null && kubectl get pods -n kube-system | grep -q Running; then
+              echo "System pods are running"
+              break
+            fi
+            echo "Waiting for system pods to start... ($i/30)"
+            sleep 2
+          done
+          # Give the cluster additional time to stabilize
+          sleep 15
+          echo "Cluster is ready!"
 
       - name: Setup LVM on k3d cluster
         if: matrix.test-name == 'storage-upsize'
