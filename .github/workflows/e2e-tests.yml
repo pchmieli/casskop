@@ -147,8 +147,16 @@ jobs:
         run: |
           kubectl apply -f https://openebs.github.io/charts/lvm-operator.yaml
           # TODO: maybe bidirectional mount propagation need to be disabled
-          kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=300s
-          kubectl rollout status daemonset/openebs-lvm-node -n kube-system --timeout=300s
+          #kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=300s
+          #kubectl rollout status daemonset/openebs-lvm-node -n kube-system --timeout=300s
+          sleep 180
+          kubectl get pods -n kube-system -l app=openebs-lvm-controller
+          
+          POD_NAME=$(kubectl get pods -n kube-system -l app=openebs-lvm-controller -o jsonpath='{.items[0].metadata.name}')
+          kubectl describe pod $POD_NAME -n kube-system
+          
+          kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=10s
+          
 
       - name: Restore Kuttl
         id: cache-kuttl
