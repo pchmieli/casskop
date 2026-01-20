@@ -145,9 +145,12 @@ jobs:
           df -h
           echo "------------------------------"
           echo "node filesystem:"
-          docker exec k3d-k3s-default-server-0 df -h /
+          docker ps
+          NODE_CONTAINER=$(docker ps | grep server-0 | rev | awk '{print $1}' | rev)
+          echo "Using node container: $NODE_CONTAINER"
+          docker exec $NODE_CONTAINER df -h /
           echo "---"
-          docker exec k3d-k3s-default-server-0 df -h
+          docker exec $NODE_CONTAINER df -h
           echo "------------------------------"
           echo "node capacity:"
           kubectl describe nodes | grep -A 15 "Capacity:"
@@ -162,9 +165,12 @@ jobs:
           df -h
           echo "------------------------------"
           echo "node filesystem:"
-          docker exec k3d-k3s-default-server-0 df -h /
+          docker ps
+          NODE_CONTAINER=$(docker ps | grep server-0 | rev | awk '{print $1}' | rev)
+          echo "Using node container: $NODE_CONTAINER"
+          docker exec $NODE_CONTAINER df -h /
           echo "---"
-          docker exec k3d-k3s-default-server-0 df -h
+          docker exec $NODE_CONTAINER df -h
           echo "------------------------------"
           echo "node capacity:"
           kubectl describe nodes | grep -A 15 "Capacity:"
