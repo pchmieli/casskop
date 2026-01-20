@@ -170,8 +170,90 @@ jobs:
           kubectl logs -n lvm-system daemonset/lvm-installer -c lvm-setup || echo "Failed to get lvm-setup logs"
           echo ""
           echo "Verify LVM volume group was created:"
-          kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; export PATH=/usr/local/sbin:/usr/local/bin:$PATH; vgs; pvs' || echo "Failed to verify LVM setup"
+          kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c '
+            export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+            export PATH=/usr/local/sbin:/usr/local/bin:$PATH
+            
+            echo "=== Loop Devices ==="
+            losetup -l || losetup -a || echo "losetup command failed"
+            echo ""
+            
+            echo "=== Loop devices attached to disk.img ==="
+            losetup -j /mnt/disks/disk.img || echo "No loop devices for disk.img found"
+            LOOP_COUNT=$(losetup -j /mnt/disks/disk.img | wc -l)
+            echo "Number of loop devices attached to disk.img: $LOOP_COUNT"
+            if [ "$LOOP_COUNT" -gt 1 ]; then
+              echo "❌ ERROR: Multiple loop devices detected for the same disk image!"
+              echo "This will cause duplicate PV issues!"
+            else
+              echo "✅ Only one loop device attached to disk.img"
+            fi
+            echo ""
+            
+            echo "=== Volume Groups ==="
+            vgs -v 2>&1
+            echo ""
+            
+            echo "=== Physical Volumes ==="
+            pvs -v 2>&1
+            echo ""
+            
+            echo "=== Detailed PV scan (shows duplicates) ==="
+            pvscan 2>&1
+            echo ""
+            
+            echo "=== Checking for duplicate PV UUIDs ==="
+            pvs --noheadings -o pv_name,pv_uuid 2>&1 | sort -k2 | uniq -d -f1 && echo "❌ DUPLICATE PV UUIDs DETECTED!" || echo "✅ No duplicate PV UUIDs"
+            echo ""
+          ' || echo "Failed to verify LVM setup"
           echo "========================================"
+          
+          # Validate no duplicate loop devices before proceeding
+          echo ""
+          echo "========================================"
+          echo "VALIDATION: Checking for duplicate loop devices..."
+          echo "========================================"
+          VALIDATION_RESULT=$(kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c '
+            LOOP_COUNT=$(losetup -j /mnt/disks/disk.img 2>/dev/null | wc -l || echo "0")
+            echo "Loop devices attached to disk.img: $LOOP_COUNT"
+            losetup -j /mnt/disks/disk.img 2>&1 || echo "No loop devices"
+            
+            if [ "$LOOP_COUNT" -gt 1 ]; then
+              echo "❌ VALIDATION FAILED: Multiple loop devices detected!"
+              echo "This will cause OpenEBS provisioning to fail with duplicate PV error."
+              exit 1
+            else
+              echo "✅ VALIDATION PASSED: Only one loop device"
+              exit 0
+            fi
+          ' 2>&1) || VALIDATION_EXIT_CODE=$?
+          
+          echo "$VALIDATION_RESULT"
+          
+          if [ "${VALIDATION_EXIT_CODE:-0}" -ne 0 ]; then
+            echo ""
+            echo "❌❌❌ CRITICAL ERROR ❌❌❌"
+            echo "Duplicate loop devices detected!"
+            echo "The lvm-installer fix did not work as expected."
+            echo "Cannot proceed with OpenEBS installation."
+            echo ""
+            echo "Showing detailed diagnostics..."
+            kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c '
+              export PATH=/usr/local/sbin:/usr/local/bin:$PATH
+              export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+              echo "All loop devices:"
+              losetup -l || losetup -a
+              echo ""
+              echo "PV scan:"
+              pvscan
+              echo ""
+              echo "All PVs with UUIDs:"
+              pvs -o pv_name,pv_uuid
+            ' || true
+            exit 1
+          fi
+          echo "========================================"
+          echo ""
           
           # Restart k3s to ensure kubelet picks up proper disk capacity
           echo "Restarting k3s to refresh disk capacity detection..."
@@ -249,9 +331,26 @@ jobs:
           echo "LVM volume groups:"
           docker exec $NODE_CONTAINER sh -c 'export PATH=/usr/local/sbin:$PATH; export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; vgs' || echo "vgs command failed"
           echo "------------------------------"
+          echo "LVM physical volumes:"
+          docker exec $NODE_CONTAINER sh -c 'export PATH=/usr/local/sbin:$PATH; export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; pvs' || echo "pvs command failed"
+          echo "------------------------------"
+          echo "Loop devices in node:"
+          docker exec $NODE_CONTAINER losetup -l || docker exec $NODE_CONTAINER losetup -a || echo "losetup failed"
+          echo "------------------------------"
+          echo "Loop devices attached to disk.img:"
+          docker exec $NODE_CONTAINER losetup -j /mnt/disks/disk.img || echo "No loop devices for disk.img"
+          LOOP_COUNT=$(docker exec $NODE_CONTAINER losetup -j /mnt/disks/disk.img | wc -l || echo "0")
+          echo "Number of loop devices for disk.img: $LOOP_COUNT"
+          if [ "$LOOP_COUNT" -gt 1 ]; then
+            echo "❌ WARNING: Multiple loop devices detected!"
+          fi
+          echo "------------------------------"
           echo "Verify OpenEBS can see LVM (from openebs-lvm-plugin container):"
           kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- vgs || echo "OpenEBS cannot see VGs - this is the problem!"
           kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- pvs || echo "OpenEBS cannot see PVs"
+          echo ""
+          echo "Checking for duplicate PV detection by OpenEBS:"
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- sh -c 'pvs --noheadings -o pv_name,pv_uuid 2>&1; pvscan 2>&1' || echo "Failed to check PVs from OpenEBS"
           echo "------------------------------"
           echo "Storage classes:"
           kubectl get sc
@@ -383,7 +482,42 @@ jobs:
           kubectl logs -n lvm-system daemonset/lvm-installer -c lvm-setup || echo "Failed to get lvm-setup logs"
           echo ""
           echo "Verify LVM setup from lvm-installer container:"
-          kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; export PATH=/usr/local/sbin:/usr/local/bin:$PATH; echo "VGs:"; vgs; echo "PVs:"; pvs; echo "LVs:"; lvs' || echo "Failed to verify LVM from lvm-installer"
+          kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c '
+            export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+            export PATH=/usr/local/sbin:/usr/local/bin:$PATH
+            
+            echo "=== All Loop Devices ==="
+            losetup -l 2>&1 || losetup -a 2>&1 || echo "losetup failed"
+            echo ""
+            
+            echo "=== Loop devices for disk.img ==="
+            losetup -j /mnt/disks/disk.img 2>&1 || echo "No loop devices"
+            LOOP_COUNT=$(losetup -j /mnt/disks/disk.img 2>/dev/null | wc -l || echo "0")
+            echo "Count: $LOOP_COUNT"
+            if [ "$LOOP_COUNT" -gt 1 ]; then
+              echo "❌ ERROR: Multiple loop devices detected - this causes duplicate PV issue!"
+            fi
+            echo ""
+            
+            echo "VGs:"
+            vgs -v 2>&1
+            echo ""
+            
+            echo "PVs:"
+            pvs -v 2>&1
+            echo ""
+            
+            echo "PV Scan (shows all detected PVs including duplicates):"
+            pvscan 2>&1
+            echo ""
+            
+            echo "Checking for duplicate PV UUIDs:"
+            pvs --noheadings -o pv_name,pv_uuid 2>&1
+            echo ""
+            
+            echo "LVs:"
+            lvs 2>&1 || echo "No LVs yet"
+          ' || echo "Failed to verify LVM from lvm-installer"
           
           echo "========================================"
           echo "Check LVM controller logs"

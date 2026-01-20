@@ -264,11 +264,33 @@ spec:
                   truncate -s 3G /mnt/disks/disk.img
                 fi
               
-                # Setup loop device
-                LOOP_DEVICE=$(losetup -f)
-                if ! losetup $LOOP_DEVICE /mnt/disks/disk.img 2>/dev/null; then
-                  echo "Loop device already set up or error occurred"
-                  LOOP_DEVICE=$(losetup -j /mnt/disks/disk.img | cut -d: -f1)
+                # Check if loop device already exists for this image and clean up duplicates
+                EXISTING_LOOPS=$(losetup -j /mnt/disks/disk.img | cut -d: -f1 || true)
+                if [ -n "$EXISTING_LOOPS" ]; then
+                  echo "Found existing loop device(s) for disk.img:"
+                  echo "$EXISTING_LOOPS"
+                  
+                  # Count how many loop devices point to this image
+                  LOOP_COUNT=$(echo "$EXISTING_LOOPS" | wc -l)
+                  
+                  if [ "$LOOP_COUNT" -gt 1 ]; then
+                    echo "WARNING: Multiple loop devices found for same image. Cleaning up duplicates..."
+                    # Keep only the first one, remove others
+                    FIRST_LOOP=$(echo "$EXISTING_LOOPS" | head -n1)
+                    echo "$EXISTING_LOOPS" | tail -n +2 | while read loop_dev; do
+                      echo "Detaching duplicate loop device: $loop_dev"
+                      losetup -d "$loop_dev" 2>/dev/null || true
+                    done
+                    LOOP_DEVICE="$FIRST_LOOP"
+                  else
+                    LOOP_DEVICE="$EXISTING_LOOPS"
+                    echo "Reusing existing loop device: $LOOP_DEVICE"
+                  fi
+                else
+                  # No existing loop device, create new one
+                  LOOP_DEVICE=$(losetup -f)
+                  echo "Setting up new loop device: $LOOP_DEVICE"
+                  losetup $LOOP_DEVICE /mnt/disks/disk.img
                 fi
               
                 echo "Using loop device: $LOOP_DEVICE"
