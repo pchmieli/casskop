@@ -186,20 +186,25 @@ jobs:
       - name: Install OpenEBS LVM LocalPV
         if: matrix.test-name == 'storage-upsize'
         run: |
-          kubectl apply -f https://openebs.github.io/charts/lvm-operator.yaml
-          # TODO: maybe bidirectional mount propagation need to be disabled
-          #kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=300s
-          #kubectl rollout status daemonset/openebs-lvm-node -n kube-system --timeout=300s
-          sleep 180
+          echo "Downloading OpenEBS LVM operator manifest..."
+          curl -sL https://openebs.github.io/charts/lvm-operator.yaml -o /tmp/openebs-lvm-operator.yaml
+          
+          echo "Removing Bidirectional mount propagation for k3d compatibility..."
+          sed -i '/mountPropagation: "Bidirectional"/d' /tmp/openebs-lvm-operator.yaml
+          
+          echo "Installing OpenEBS LVM operator..."
+          kubectl apply -f /tmp/openebs-lvm-operator.yaml
+          
+          echo "Waiting for OpenEBS LVM controller to be ready..."
+          kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=300s
+          
+          echo "Waiting for OpenEBS LVM node daemonset to be ready..."
+          kubectl rollout status daemonset/openebs-lvm-node -n kube-system --timeout=300s
+          
+          echo "OpenEBS LVM components:"
           kubectl get pods -n kube-system -l app=openebs-lvm-controller
           
-          POD_NAME=$(kubectl get pods -n kube-system -l app=openebs-lvm-controller -o jsonpath='{.items[0].metadata.name}')
-          kubectl describe pod $POD_NAME -n kube-system
-          
-          kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=10s
-          
-          #TODO: clean that step
-          
+          echo ""
           echo "=============================="
           echo "FINAL DIAGNOSTICS"
           echo "=============================="
