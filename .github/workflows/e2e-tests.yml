@@ -107,13 +107,7 @@ jobs:
       - uses: rinx/setup-k3d@v0.0.4
         with:
           version: v5.4.0
-          options: >-
-            --image rancher/k3s:v1.24.13-k3s1
-            --k3s-arg "--kubelet-arg=image-gc-high-threshold=85@server:0"
-            --k3s-arg "--kubelet-arg=image-gc-low-threshold=80@server:0"
-            --k3s-arg "--kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%@server:0"
-            --k3s-arg "--kubelet-arg=eviction-minimum-reclaim=imagefs.available=5%,nodefs.available=5%@server:0"
-            --k3s-arg "--kubelet-arg=image-service-endpoint=unix:///run/k3s/containerd/containerd.sock@server:0"
+          options: --image rancher/k3s:v1.24.13-k3s1 --k3s-arg --kubelet-arg=image-gc-high-threshold=85@server:0 --k3s-arg --kubelet-arg=image-gc-low-threshold=80@server:0 --k3s-arg --kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%@server:0 --k3s-arg --kubelet-arg=eviction-minimum-reclaim=imagefs.available=5%,nodefs.available=5%@server:0 --k3s-arg --kubelet-arg=image-service-endpoint=unix:///run/k3s/containerd/containerd.sock@server:0
 
       - name: Wait for k3d cluster to be ready
         run: |
