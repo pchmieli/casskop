@@ -158,6 +158,21 @@ jobs:
           kubectl apply -f test/setup/lvm-installer.yaml
           kubectl wait --for=condition=ready pod -l app=lvm-installer -n lvm-system --timeout=300s --all
           
+          echo "========================================"
+          echo "Verify LVM installer completed successfully"
+          echo "LVM installer pods:"
+          kubectl get pods -n lvm-system -l app=lvm-installer
+          echo ""
+          echo "LVM installer init container logs:"
+          kubectl logs -n lvm-system daemonset/lvm-installer -c install-lvm-tools || echo "Failed to get install-lvm-tools logs"
+          echo ""
+          echo "LVM installer main container logs:"
+          kubectl logs -n lvm-system daemonset/lvm-installer -c lvm-setup || echo "Failed to get lvm-setup logs"
+          echo ""
+          echo "Verify LVM volume group was created:"
+          kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; export PATH=/usr/local/sbin:/usr/local/bin:$PATH; vgs; pvs' || echo "Failed to verify LVM setup"
+          echo "========================================"
+          
           # Restart k3s to ensure kubelet picks up proper disk capacity
           echo "Restarting k3s to refresh disk capacity detection..."
           docker exec $NODE_CONTAINER sh -c 'kill -HUP 1' || true
@@ -203,6 +218,7 @@ jobs:
           
           echo "OpenEBS LVM components:"
           kubectl get pods -n kube-system -l app=openebs-lvm-controller
+          kubectl get pods -n kube-system -l app=openebs-lvm-node
           
           echo ""
           echo "=============================="
@@ -232,6 +248,10 @@ jobs:
           echo "------------------------------"
           echo "LVM volume groups:"
           docker exec $NODE_CONTAINER sh -c 'export PATH=/usr/local/sbin:$PATH; export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; vgs' || echo "vgs command failed"
+          echo "------------------------------"
+          echo "Verify OpenEBS can see LVM (from openebs-lvm-plugin container):"
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- vgs || echo "OpenEBS cannot see VGs - this is the problem!"
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- pvs || echo "OpenEBS cannot see PVs"
           echo "------------------------------"
           echo "Storage classes:"
           kubectl get sc
@@ -352,17 +372,45 @@ jobs:
           kubectl describe nodes
           
           echo "========================================"
+          echo "Check LVM installer logs"
+          echo "LVM installer pods:"
+          kubectl get pods -n lvm-system -l app=lvm-installer || echo "No lvm-installer pods found"
+          echo ""
+          echo "LVM installer init container logs (install-lvm-tools):"
+          kubectl logs -n lvm-system daemonset/lvm-installer -c install-lvm-tools || echo "Failed to get install-lvm-tools logs"
+          echo ""
+          echo "LVM installer main container logs (lvm-setup):"
+          kubectl logs -n lvm-system daemonset/lvm-installer -c lvm-setup || echo "Failed to get lvm-setup logs"
+          echo ""
+          echo "Verify LVM setup from lvm-installer container:"
+          kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; export PATH=/usr/local/sbin:/usr/local/bin:$PATH; echo "VGs:"; vgs; echo "PVs:"; pvs; echo "LVs:"; lvs' || echo "Failed to verify LVM from lvm-installer"
+          
+          echo "========================================"
           echo "Check LVM controller logs"
-          kubectl logs -n kube-system pods/openebs-lvm-controller-0
+          kubectl logs -n kube-system deployment/openebs-lvm-controller || kubectl logs -n kube-system pods/openebs-lvm-controller-0 || echo "Failed to get LVM controller logs"
           
           echo "========================================"
           echo "Check LVM node logs"
-          kubectl logs -n kube-system daemonset/openebs-lvm-node
+          echo "LVM node pods:"
+          kubectl get pods -n kube-system -l app=openebs-lvm-node || echo "No LVM node pods found"
+          echo ""
+          echo "LVM node plugin logs (openebs-lvm-plugin container):"
+          kubectl logs -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin || echo "Failed to get openebs-lvm-plugin logs"
+          echo ""
+          echo "LVM node registrar logs (csi-node-driver-registrar container):"
+          kubectl logs -n kube-system daemonset/openebs-lvm-node -c csi-node-driver-registrar || echo "Failed to get csi-node-driver-registrar logs"
           
           echo "========================================"
           echo "Verify LVM volume group exists and has space"
-          kubectl exec -n kube-system daemonset/openebs-lvm-node -- vgs
-          kubectl exec -n kube-system daemonset/openebs-lvm-node -- pvs
+          echo "Check LVM volume group - specify the openebs-lvm-plugin container"
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- vgs
+          echo "====="
+          echo "Check physical volumes"
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- pvs
+          echo "====="
+          echo "Check logical volumes"
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -c openebs-lvm-plugin -- lvs
+          echo "====="
           
           echo "========================================"
           echo "Check the storage class configuration"
