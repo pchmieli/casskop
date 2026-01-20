@@ -179,8 +179,8 @@ jobs:
             echo ""
             
             echo "=== Loop devices attached to disk.img ==="
-            losetup -j /mnt/disks/disk.img || echo "No loop devices for disk.img found"
-            LOOP_COUNT=$(losetup -j /mnt/disks/disk.img | wc -l)
+            losetup -a 2>/dev/null | grep "/mnt/disks/disk.img" || echo "No loop devices for disk.img found"
+            LOOP_COUNT=$(losetup -a 2>/dev/null | grep "/mnt/disks/disk.img" | wc -l || echo "0")
             echo "Number of loop devices attached to disk.img: $LOOP_COUNT"
             if [ "$LOOP_COUNT" -gt 1 ]; then
               echo "❌ ERROR: Multiple loop devices detected for the same disk image!"
@@ -214,9 +214,9 @@ jobs:
           echo "VALIDATION: Checking for duplicate loop devices..."
           echo "========================================"
           VALIDATION_RESULT=$(kubectl exec -n lvm-system daemonset/lvm-installer -c lvm-setup -- nsenter --mount=/proc/1/ns/mnt -- sh -c '
-            LOOP_COUNT=$(losetup -j /mnt/disks/disk.img 2>/dev/null | wc -l || echo "0")
+            LOOP_COUNT=$(losetup -a 2>/dev/null | grep "/mnt/disks/disk.img" | wc -l || echo "0")
             echo "Loop devices attached to disk.img: $LOOP_COUNT"
-            losetup -j /mnt/disks/disk.img 2>&1 || echo "No loop devices"
+            losetup -a 2>/dev/null | grep "/mnt/disks/disk.img" || echo "No loop devices"
             
             if [ "$LOOP_COUNT" -gt 1 ]; then
               echo "❌ VALIDATION FAILED: Multiple loop devices detected!"
@@ -491,8 +491,8 @@ jobs:
             echo ""
             
             echo "=== Loop devices for disk.img ==="
-            losetup -j /mnt/disks/disk.img 2>&1 || echo "No loop devices"
-            LOOP_COUNT=$(losetup -j /mnt/disks/disk.img 2>/dev/null | wc -l || echo "0")
+            losetup -a 2>/dev/null | grep "/mnt/disks/disk.img" || echo "No loop devices"
+            LOOP_COUNT=$(losetup -a 2>/dev/null | grep "/mnt/disks/disk.img" | wc -l || echo "0")
             echo "Count: $LOOP_COUNT"
             if [ "$LOOP_COUNT" -gt 1 ]; then
               echo "❌ ERROR: Multiple loop devices detected - this causes duplicate PV issue!"

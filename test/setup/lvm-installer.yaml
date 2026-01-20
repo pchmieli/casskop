@@ -264,34 +264,47 @@ spec:
                   truncate -s 3G /mnt/disks/disk.img
                 fi
               
-                # Check if loop device already exists for this image and clean up duplicates
-                EXISTING_LOOPS=$(losetup -j /mnt/disks/disk.img | cut -d: -f1 || true)
-                if [ -n "$EXISTING_LOOPS" ]; then
-                  echo "Found existing loop device(s) for disk.img:"
-                  echo "$EXISTING_LOOPS"
+              # Check if loop device already exists for this image and clean up duplicates
+              # Use losetup -a (all devices) and grep for our image, as losetup -j may miss devices
+              # if the path was specified differently when they were created
+              EXISTING_LOOPS=$(losetup -a 2>/dev/null | grep "/mnt/disks/disk.img" | cut -d: -f1 || true)
+              
+              if [ -n "$EXISTING_LOOPS" ]; then
+                echo "Found existing loop device(s) for disk.img:"
+                echo "$EXISTING_LOOPS"
+                
+                # Count how many loop devices point to this image
+                LOOP_COUNT=$(echo "$EXISTING_LOOPS" | wc -l)
+                echo "Loop device count: $LOOP_COUNT"
+                
+                if [ "$LOOP_COUNT" -gt 1 ]; then
+                  echo "⚠️  WARNING: Multiple loop devices found for same image!"
+                  echo "This causes duplicate PV UUID issues. Cleaning up..."
                   
-                  # Count how many loop devices point to this image
-                  LOOP_COUNT=$(echo "$EXISTING_LOOPS" | wc -l)
+                  # Keep only the first one, remove others
+                  FIRST_LOOP=$(echo "$EXISTING_LOOPS" | head -n1)
+                  echo "Keeping: $FIRST_LOOP"
                   
-                  if [ "$LOOP_COUNT" -gt 1 ]; then
-                    echo "WARNING: Multiple loop devices found for same image. Cleaning up duplicates..."
-                    # Keep only the first one, remove others
-                    FIRST_LOOP=$(echo "$EXISTING_LOOPS" | head -n1)
-                    echo "$EXISTING_LOOPS" | tail -n +2 | while read loop_dev; do
-                      echo "Detaching duplicate loop device: $loop_dev"
-                      losetup -d "$loop_dev" 2>/dev/null || true
-                    done
-                    LOOP_DEVICE="$FIRST_LOOP"
-                  else
-                    LOOP_DEVICE="$EXISTING_LOOPS"
-                    echo "Reusing existing loop device: $LOOP_DEVICE"
-                  fi
+                  echo "$EXISTING_LOOPS" | tail -n +2 | while read loop_dev; do
+                    if [ -n "$loop_dev" ]; then
+                      echo "Detaching duplicate: $loop_dev"
+                      losetup -d "$loop_dev" 2>/dev/null || echo "Failed to detach $loop_dev"
+                    fi
+                  done
+                  
+                  LOOP_DEVICE="$FIRST_LOOP"
+                  echo "✅ Cleaned up duplicates, using: $LOOP_DEVICE"
                 else
-                  # No existing loop device, create new one
-                  LOOP_DEVICE=$(losetup -f)
-                  echo "Setting up new loop device: $LOOP_DEVICE"
-                  losetup $LOOP_DEVICE /mnt/disks/disk.img
+                  LOOP_DEVICE="$EXISTING_LOOPS"
+                  echo "✅ Reusing existing loop device: $LOOP_DEVICE"
                 fi
+              else
+                # No existing loop device, create new one
+                LOOP_DEVICE=$(losetup -f)
+                echo "No existing loop device found, creating new one: $LOOP_DEVICE"
+                losetup $LOOP_DEVICE /mnt/disks/disk.img
+                echo "✅ Created new loop device: $LOOP_DEVICE"
+              fi
               
                 echo "Using loop device: $LOOP_DEVICE"
               
