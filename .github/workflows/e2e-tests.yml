@@ -353,7 +353,7 @@ jobs:
           
           echo "========================================"
           echo "Check LVM controller logs"
-          kubectl logs -n kube-system deployment/openebs-lvm-controller
+          kubectl logs -n kube-system pods/openebs-lvm-controller-0
           
           echo "========================================"
           echo "Check LVM node logs"
