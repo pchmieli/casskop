@@ -107,7 +107,13 @@ jobs:
       - uses: rinx/setup-k3d@v0.0.4
         with:
           version: v5.4.0
-          options: --image rancher/k3s:v1.24.13-k3s1
+          options: >-
+            --image rancher/k3s:v1.24.13-k3s1
+            --k3s-arg "--kubelet-arg=image-gc-high-threshold=85@server:0"
+            --k3s-arg "--kubelet-arg=image-gc-low-threshold=80@server:0"
+            --k3s-arg "--kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%@server:0"
+            --k3s-arg "--kubelet-arg=eviction-minimum-reclaim=imagefs.available=5%,nodefs.available=5%@server:0"
+            --k3s-arg "--kubelet-arg=image-service-endpoint=unix:///run/k3s/containerd/containerd.sock@server:0"
 
       - name: Wait for k3d cluster to be ready
         run: |
@@ -145,7 +151,6 @@ jobs:
           df -h
           echo "------------------------------"
           echo "node filesystem:"
-          docker ps
           NODE_CONTAINER=$(docker ps | grep server-0 | rev | awk '{print $1}' | rev)
           echo "Using node container: $NODE_CONTAINER"
           docker exec $NODE_CONTAINER df -h /
@@ -159,13 +164,21 @@ jobs:
           kubectl apply -f test/setup/lvm-installer.yaml
           kubectl wait --for=condition=ready pod -l app=lvm-installer -n lvm-system --timeout=300s --all
           
+          # Restart k3s to ensure kubelet picks up proper disk capacity
+          echo "Restarting k3s to refresh disk capacity detection..."
+          docker exec $NODE_CONTAINER sh -c 'kill -HUP 1' || true
+          
+          # Wait for k3s to come back up
+          echo "Waiting for cluster to stabilize after restart..."
+          sleep 30
+          kubectl wait --for=condition=ready node --all --timeout=300s
+          
           echo "host filesystem:"
           df -h /
           echo "---"
           df -h
           echo "------------------------------"
           echo "node filesystem:"
-          docker ps
           NODE_CONTAINER=$(docker ps | grep server-0 | rev | awk '{print $1}' | rev)
           echo "Using node container: $NODE_CONTAINER"
           docker exec $NODE_CONTAINER df -h /
@@ -192,6 +205,83 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=10s
           
           #TODO: clean that step
+          
+          echo "=============================="
+          echo "FINAL DIAGNOSTICS"
+          echo "=============================="
+          echo ""
+          echo "host filesystem:"
+          df -h /
+          echo "---"
+          df -h
+          echo "------------------------------"
+          echo "node filesystem:"
+          NODE_CONTAINER=$(docker ps | grep server-0 | rev | awk '{print $1}' | rev)
+          echo "Using node container: $NODE_CONTAINER"
+          docker exec $NODE_CONTAINER df -h /
+          echo "---"
+          docker exec $NODE_CONTAINER df -h
+          echo "------------------------------"
+          echo "node capacity and allocatable:"
+          kubectl describe nodes | grep -A 15 "Capacity:"
+          echo "------------------------------"
+          echo "node conditions:"
+          kubectl get nodes -o json | jq '.items[].status.conditions'
+          echo "------------------------------"
+          echo "kubelet config (image filesystem):"
+          docker exec $NODE_CONTAINER cat /var/lib/rancher/k3s/agent/etc/kubelet.config 2>/dev/null || echo "kubelet config not accessible"
+          echo "------------------------------"
+          echo "LVM volume groups:"
+          docker exec $NODE_CONTAINER sh -c 'export PATH=/usr/local/sbin:$PATH; export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH; vgs' || echo "vgs command failed"
+          echo "------------------------------"
+          echo "Storage classes:"
+          kubectl get sc
+          echo "------------------------------"
+
+      - name: Start background pod diagnostics
+        if: matrix.test-name == 'storage-upsize'
+        run: |
+          # Start background monitoring script
+          nohup bash -c '
+            sleep 10
+            for i in {1..60}; do
+              echo "=== Diagnostics check $i at $(date) ==="
+              echo ""
+              echo "--- Cassandra pods ---"
+              kubectl get pods -l app=cassandra -o wide 2>/dev/null || echo "No cassandra pods yet"
+              echo ""
+              echo "--- Cassandra pod details (if exists) ---"
+              POD=$(kubectl get pod cassandra-e2e-dc1-rack1-0 -o name 2>/dev/null)
+              if [ -n "$POD" ]; then
+                echo "Pod status:"
+                kubectl get pod cassandra-e2e-dc1-rack1-0 -o json | jq ".status.conditions, .status.containerStatuses"
+                echo ""
+                echo "Pod events:"
+                kubectl describe pod cassandra-e2e-dc1-rack1-0 | tail -n 30
+              fi
+              echo ""
+              echo "--- PVC status ---"
+              kubectl get pvc data-cassandra-e2e-dc1-rack1-0 2>/dev/null || echo "PVC not created yet"
+              echo ""
+              echo "--- PV status ---"
+              kubectl get pv 2>/dev/null || echo "No PVs yet"
+              echo ""
+              echo "--- Node conditions ---"
+              kubectl get nodes -o json | jq ".items[].status.conditions[] | select(.type==\"Ready\" or .type==\"DiskPressure\" or .type==\"MemoryPressure\")"
+              echo ""
+              echo "--- Node capacity ---"
+              kubectl get nodes -o json | jq ".items[] | {name: .metadata.name, capacity: .status.capacity, allocatable: .status.allocatable}"
+              echo ""
+              echo "--- Recent events ---"
+              kubectl get events --sort-by=.metadata.creationTimestamp | tail -n 10
+              echo ""
+              echo "========================================"
+              echo ""
+              sleep 20
+            done
+          ' > /tmp/diagnostics.log 2>&1 &
+          echo "Background diagnostics started with PID $!"
+          echo "Logs will be in /tmp/diagnostics.log"
 
       - name: Restore Kuttl
         id: cache-kuttl
@@ -232,3 +322,33 @@ jobs:
           helm install casskop charts/casskop --set image.tag=${{ steps.get-branch.outputs.branch }} --set image.repository=ghcr.io/${{ steps.lower-repo.outputs.repository }}
           cd test/kuttl/
           kuttl test --test ${{ matrix.test-name }} --namespace default --skip-delete
+
+      - name: Dump background diagnostics
+        if: matrix.test-name == 'storage-upsize' && always()
+        run: |
+          echo "========================================"
+          echo "BACKGROUND DIAGNOSTICS LOG"
+          echo "========================================"
+          if [ -f /tmp/diagnostics.log ]; then
+            cat /tmp/diagnostics.log
+          else
+            echo "No diagnostics log found"
+          fi
+          echo "========================================"
+          echo "FINAL STATE"
+          echo "========================================"
+          echo "All pods:"
+          kubectl get pods --all-namespaces -o wide
+          echo ""
+          echo "All PVCs:"
+          kubectl get pvc --all-namespaces
+          echo ""
+          echo "All PVs:"
+          kubectl get pv
+          echo ""
+          echo "All events:"
+          kubectl get events --all-namespaces --sort-by=.metadata.creationTimestamp
+          echo ""
+          echo "Node describe:"
+          kubectl describe nodes
+
