@@ -350,4 +350,21 @@ jobs:
           echo ""
           echo "Node describe:"
           kubectl describe nodes
+          
+          echo "========================================"
+          echo "Check LVM controller logs"
+          kubectl logs -n kube-system deployment/openebs-lvm-controller
+          
+          echo "========================================"
+          echo "Check LVM node logs"
+          kubectl logs -n kube-system daemonset/openebs-lvm-node
+          
+          echo "========================================"
+          echo "Verify LVM volume group exists and has space"
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -- vgs
+          kubectl exec -n kube-system daemonset/openebs-lvm-node -- pvs
+          
+          echo "========================================"
+          echo "Check the storage class configuration"
+          kubectl get sc openebs-lvm-sc -o yaml
 
