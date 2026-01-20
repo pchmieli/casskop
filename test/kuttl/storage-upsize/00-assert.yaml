@@ -28,10 +28,10 @@ metadata:
 spec:
   resources:
     requests:
-      storage: 1Gi
+      storage: 64Mi
   storageClassName: openebs-lvm-sc
   volumeMode: Filesystem
 status:
   capacity:
-    storage: 1Gi
+    storage: 64Mi
   phase: Bound

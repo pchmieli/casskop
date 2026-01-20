@@ -3,4 +3,4 @@ kind: CassandraCluster
 metadata:
   name: cassandra-e2e
 spec:
-  dataCapacity: 2Gi
+  dataCapacity: 80Mi

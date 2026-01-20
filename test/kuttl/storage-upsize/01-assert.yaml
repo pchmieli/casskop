@@ -28,8 +28,8 @@ metadata:
 spec:
   resources:
     requests:
-      storage: 2Gi
+      storage: 80Mi
 status:
   capacity:
-    storage: 2Gi
+    storage: 80Mi
   phase: Bound

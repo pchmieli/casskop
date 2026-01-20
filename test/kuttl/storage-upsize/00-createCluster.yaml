@@ -21,7 +21,7 @@ kind: CassandraCluster
 metadata:
   name: cassandra-e2e
 spec:
-  dataCapacity: 1Gi
+  dataCapacity: 64Mi
   dataStorageClass: openebs-lvm-sc
   nodesPerRacks: 1
   cassandraImage: cassandra:4.0.2
