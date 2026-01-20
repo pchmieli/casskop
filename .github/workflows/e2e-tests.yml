@@ -139,8 +139,36 @@ jobs:
       - name: Setup LVM on k3d cluster
         if: matrix.test-name == 'storage-upsize'
         run: |
+          echo "host filesystem:"
+          df -h /
+          echo "---"
+          df -h
+          echo "------------------------------"
+          echo "node filesystem:"
+          docker exec k3d-k3s-default-server-0 df -h /
+          echo "---"
+          docker exec k3d-k3s-default-server-0 df -h
+          echo "------------------------------"
+          echo "node capacity:"
+          kubectl describe nodes | grep -A 15 "Capacity:"
+          echo "------------------------------"
+          
           kubectl apply -f test/setup/lvm-installer.yaml
           kubectl wait --for=condition=ready pod -l app=lvm-installer -n lvm-system --timeout=300s --all
+          
+          echo "host filesystem:"
+          df -h /
+          echo "---"
+          df -h
+          echo "------------------------------"
+          echo "node filesystem:"
+          docker exec k3d-k3s-default-server-0 df -h /
+          echo "---"
+          docker exec k3d-k3s-default-server-0 df -h
+          echo "------------------------------"
+          echo "node capacity:"
+          kubectl describe nodes | grep -A 15 "Capacity:"
+          echo "------------------------------"
 
       - name: Install OpenEBS LVM LocalPV
         if: matrix.test-name == 'storage-upsize'
@@ -157,6 +185,7 @@ jobs:
           
           kubectl wait --for=condition=ready pod -l app=openebs-lvm-controller -n kube-system --timeout=10s
           
+          #TODO: clean that step
 
       - name: Restore Kuttl
         id: cache-kuttl

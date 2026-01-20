@@ -258,10 +258,10 @@ spec:
                 # Ensure mount point exists
                 mkdir -p /mnt/disks
               
-                # Create a 10GB loop device (simulating a physical disk)
+                # Create a 3GB loop device (simulating a physical disk)
                 if [ ! -f /mnt/disks/disk.img ]; then
                   echo "Creating disk image..."
-                  truncate -s 10G /mnt/disks/disk.img
+                  truncate -s 3G /mnt/disks/disk.img
                 fi
               
                 # Setup loop device
