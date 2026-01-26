@@ -1,0 +1,12 @@
+Ok, let's try approach with kind and openebs. Local-path-provisioner is not enough, it does not allow for online volume expansion, requires pod restart.
+
+Eventually, I want to run it in github action, but first I want to run it locally to have fast-feedback loop to mitigate all the issues.
+
+I will start with running ubuntu container in docker. Then, inside this container I want to start kind, install lvm on kind node and run test that checks if online (without pod restart) disk expansion works.
+
+Please remember about online expansion requirement, do not suggest me solutions like local path, host path, nfs and so on. I need a capability in kind cluster to create and mount pvc and then to upsize it without pod restart.
+
+Let's do it step by step. As I want to mimic github action on my local setup, I want to run everything in ubuntu:22. Is that what GH action do? Do they use docker?
+`  kuttl-casskop:
+    needs: install-kuttl
+    runs-on: ubuntu-latest`

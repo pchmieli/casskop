@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nfs-client-installer
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: nfs-client-installer
+  template:
+    metadata:
+      labels:
+        app: nfs-client-installer
+    spec:
+      hostPID: true
+      hostNetwork: true
+      initContainers:
+        - name: install-nfs
+          image: alpine:latest
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache nfs-utils krb5-libs keyutils-libs
+              # Copy NFS mount binaries
+              cp /sbin/mount.nfs /host/sbin/
+              cp /sbin/mount.nfs4 /host/sbin/
+              # Copy RPC binaries
+              cp /sbin/rpcbind /host/sbin/ 2>/dev/null || true
+              cp /usr/sbin/rpcbind /host/usr/sbin/ 2>/dev/null || true
+              cp /usr/sbin/rpc.statd /host/usr/sbin/ 2>/dev/null || true
+              # Copy showmount
+              cp /usr/sbin/showmount /host/usr/sbin/ 2>/dev/null || true
+              # Copy base libraries from /lib
+              cp -a /lib/ld-musl-*.so* /host/lib/
+              cp -a /lib/libc.musl-*.so* /host/lib/
+              # Copy libraries from /usr/lib
+              cp -a /usr/lib/libtirpc.so* /host/usr/lib/
+              cp -a /usr/lib/libblkid.so* /host/usr/lib/
+              cp -a /usr/lib/libmount.so* /host/usr/lib/
+              cp -a /usr/lib/libevent* /host/usr/lib/
+              # Copy Kerberos/GSSAPI libraries
+              cp -a /usr/lib/libgssapi_krb5.so* /host/usr/lib/
+              cp -a /usr/lib/libkrb5.so* /host/usr/lib/
+              cp -a /usr/lib/libk5crypto.so* /host/usr/lib/
+              cp -a /usr/lib/libcom_err.so* /host/usr/lib/
+              cp -a /usr/lib/libkrb5support.so* /host/usr/lib/
+              cp -a /usr/lib/libverto.so* /host/usr/lib/
+              cp -a /usr/lib/libresolv.so* /host/usr/lib/ 2>/dev/null || true
+              # Copy keyutils
+              cp -a /usr/lib/libkeyutils.so* /host/usr/lib/
+              cp -a /usr/lib/libkeyutils.so* /host/lib/
+              # Create required runtime directories
+              mkdir -p /host/var/run/rpcbind /host/run/rpcbind
+              # Start rpcbind and rpc.statd on the host
+              chroot /host /usr/sbin/rpcbind
+              chroot /host /usr/sbin/rpc.statd
+              echo "NFS tools installed and RPC services started"
+          volumeMounts:
+            - name: host-sbin
+              mountPath: /host/sbin
+            - name: host-usr-sbin
+              mountPath: /host/usr/sbin
+            - name: host-lib
+              mountPath: /host/lib
+            - name: host-usr-lib
+              mountPath: /host/usr/lib
+          securityContext:
+            privileged: true
+      containers:
+        - name: pause
+          image: gcr.io/google_containers/pause:3.1
+      volumes:
+        - name: host-sbin
+          hostPath:
+            path: /sbin
+        - name: host-usr-sbin
+          hostPath:
+            path: /usr/sbin
+        - name: host-lib
+          hostPath:
+            path: /lib
+        - name: host-usr-lib
+          hostPath:
+            path: /usr/lib

@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nfs-client-installer
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: nfs-client-installer
+  template:
+    metadata:
+      labels:
+        app: nfs-client-installer
+    spec:
+      hostPID: true
+      hostNetwork: true
+      initContainers:
+        - name: install-nfs
+          image: alpine:latest
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache nfs-utils
+              # Copy only mount binaries and libraries
+              cp /sbin/mount.nfs /host/sbin/
+              cp /sbin/mount.nfs4 /host/sbin/
+              cp /usr/sbin/showmount /host/usr/sbin/
+              cp /usr/sbin/rpcbind /host/usr/sbin/
+              cp /usr/sbin/rpc.statd /host/usr/sbin/
+              # Copy required libraries
+              cp -a /lib/ld-musl-*.so* /host/lib/
+              cp -a /usr/lib/libtirpc.so* /host/usr/lib/
+              cp -a /usr/lib/libblkid.so* /host/usr/lib/
+              cp -a /usr/lib/libmount.so* /host/usr/lib/
+              echo "NFS binaries copied"
+          volumeMounts:
+            - name: host-sbin
+              mountPath: /host/sbin
+            - name: host-usr-sbin
+              mountPath: /host/usr/sbin
+            - name: host-lib
+              mountPath: /host/lib
+            - name: host-usr-lib
+              mountPath: /host/usr/lib
+          securityContext:
+            privileged: true
+      containers:
+        - name: rpc-services
+          image: alpine:latest
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache nfs-utils
+              mkdir -p /var/run/rpcbind /run/rpcbind
+              rpcbind
+              rpc.statd
+              sleep infinity
+          securityContext:
+            privileged: true
+      volumes:
+        - name: host-sbin
+          hostPath:
+            path: /sbin
+        - name: host-usr-sbin
+          hostPath:
+            path: /usr/sbin
+        - name: host-lib
+          hostPath:
+            path: /lib
+        - name: host-usr-lib
+          hostPath:
+            path: /usr/lib

@@ -1,0 +1,37 @@
+# Dockerfile.k3s-lvm2
+
+# 1) Builder: install lvm2 and collect binaries+libs
+FROM debian:bookworm-slim AS lvm
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends lvm2 ca-certificates; \
+    rm -rf /var/lib/apt/lists/*; \
+    mkdir -p /out/bin /out/lib /out/etc/lvm /out/run/lvm
+
+# Copy the lvm binaries you typically need
+RUN set -eux; \
+    cp -a /sbin/lvm /out/bin/; \
+    for b in pvcreate pvdisplay pvs vgcreate vgdisplay vgs lvcreate lvdisplay lvs lvextend lvreduce lvremove vgremove pvremove; do \
+      if [ -x "/sbin/$b" ]; then cp -a "/sbin/$b" /out/bin/; fi; \
+    done
+
+# Copy config (optional but useful)
+RUN set -eux; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi
+
+# Copy shared libraries required by the copied binaries
+RUN set -eux; \
+    ldd /out/bin/lvm | awk '/=> \//{print $3} /^\//{print $1}' | sort -u | xargs -r -I{} cp -a --parents {} /out/; \
+    # also copy the dynamic loader if present in ldd output
+    ldd /out/bin/lvm | awk '/ld-linux/ {print $1}' | sort -u | xargs -r -I{} cp -a --parents {} /out/
+
+# 2) Final: minimal K3s image + injected lvm2 bits
+FROM rancher/k3s:v1.24.13-k3s1
+
+# Put binaries where PATH can find; keep libs in standard locations
+COPY --from=lvm /out/bin/ /usr/local/sbin/
+COPY --from=lvm /out/lib/ /lib/
+COPY --from=lvm /out/etc/lvm/ /etc/lvm/
+
+# BusyBox shell; quick check (does not run during build unless you add RUN)
+# lvm will be available as /usr/local/sbin/lvm

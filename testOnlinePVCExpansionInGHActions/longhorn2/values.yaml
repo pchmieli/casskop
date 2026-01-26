@@ -1,0 +1,24 @@
+defaultSettings:
+  defaultDataPath: /var/lib/longhorn
+  defaultDataLocality: disabled
+  replicaSoftAntiAffinity: false
+  upgradeChecker: false
+  defaultReplicaCount: 2
+  guaranteedEngineManagerCPU: 12
+  guaranteedReplicaManagerCPU: 12
+
+csi:
+  kubeletRootDir: /var/lib/kubelet
+  attacherReplicaCount: 1
+  provisionerReplicaCount: 1
+  resizerReplicaCount: 1
+  snapshotterReplicaCount: 1
+
+persistence:
+  defaultClass: true
+  defaultClassReplicaCount: 2
+  reclaimPolicy: Delete
+
+longhornManager:
+  tolerations: []
+  nodeSelector: {}

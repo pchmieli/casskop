@@ -1,0 +1,19 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Ubuntu-provided LVM stack (consistent glibc + libs)
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      lvm2 \
+      dmsetup \
+      util-linux \
+      e2fsprogs \
+      ca-certificates; \
+    rm -rf /var/lib/apt/lists/*; \
+    command -v lvm; \
+    lvm version; \
+    dmsetup version || true
+
+CMD ["bash", "-lc", "lvm version && dmsetup version || true"]

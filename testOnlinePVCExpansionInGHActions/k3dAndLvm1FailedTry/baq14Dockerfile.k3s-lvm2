@@ -1,0 +1,35 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl; \
+    mkdir -p /out/usr/local/sbin /out/etc/lvm /out/lib /out/usr/lib; \
+    cp -a /sbin/lvm /out/usr/local/sbin/; \
+    cp -a /sbin/dmsetup /out/usr/local/sbin/; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi; \
+    \
+    # Copy the exact interpreter required by the binaries
+    cp -a /lib/ld-musl-x86_64.so.1 /out/lib/; \
+    \
+    # Copy musl's libc (for musl, this is typically the same file name as the loader)
+    # Keep it even if it looks "duplicate"; it is required as a NEEDED entry on some builds.
+    cp -a /lib/libc.musl-x86_64.so.1 /out/lib/ 2>/dev/null || true; \
+    \
+    # Also stage the libs ldd showed as needed (minimal set)
+    cp -a /lib/libdevmapper.so.1.02 /out/lib/; \
+    cp -a /lib/libdevmapper-event.so.1.02 /out/lib/; \
+    cp -a /lib/libblkid.so.1 /out/lib/; \
+    cp -a /usr/lib/libaio.so.1 /out/usr/lib/; \
+    cp -a /usr/lib/libeconf.so.0 /out/usr/lib/; \
+    \
+    # Sanity
+    test -e /out/lib/ld-musl-x86_64.so.1
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/ /
+
+RUN set -eux; \
+    ls -l /usr/local/sbin/lvm /usr/local/sbin/dmsetup; \
+    ls -l /lib/ld-musl-x86_64.so.1; \
+    /usr/local/sbin/lvm version || true; \
+    /usr/local/sbin/dmsetup version || true

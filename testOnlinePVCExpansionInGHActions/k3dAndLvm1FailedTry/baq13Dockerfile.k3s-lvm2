@@ -1,0 +1,49 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl; \
+    mkdir -p /out/usr/local/sbin /out/etc/lvm; \
+    cp -a /sbin/lvm /out/usr/local/sbin/; \
+    cp -a /sbin/dmsetup /out/usr/local/sbin/; \
+    \
+    echo "=== VERIFY lvm stage output paths ==="; \
+    ls -l /out/usr/local/sbin/; \
+    test -x /out/usr/local/sbin/lvm; \
+    test -x /out/usr/local/sbin/dmsetup; \
+    \
+    echo "=== lvm stage: show PT_INTERP (dynamic loader path) ==="; \
+    for f in /out/usr/local/sbin/lvm /out/usr/local/sbin/dmsetup; do \
+      echo "--- $f"; \
+      # Extract the first absolute path string, which is typically PT_INTERP (e.g. /lib/ld-musl-x86_64.so.1 or /lib64/ld-linux-x86-64.so.2)
+      interp="$(strings "$f" | sed -n 's#^\(/[^[:space:]]*ld[^[:space:]]*\.so[^[:space:]]*\)$#\1#p' | head -n 1)"; \
+      echo "INTERP=$interp"; \
+      [ -n "$interp" ] || { echo "NO_INTERP_FOUND"; exit 1; }; \
+      ls -l "$interp" || true; \
+    done; \
+    \
+    echo "=== VERIFY lvm stage deps (for later) ==="; \
+    ldd /out/usr/local/sbin/lvm || true; \
+    ldd /out/usr/local/sbin/dmsetup || true
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/ /
+
+RUN set -eux; \
+    echo "=== VERIFY final image has the binaries ==="; \
+    ls -l /usr/local/sbin/ || true; \
+    test -x /usr/local/sbin/lvm; \
+    test -x /usr/local/sbin/dmsetup; \
+    \
+    echo "=== final image: show PT_INTERP (dynamic loader path) and check it exists ==="; \
+    for f in /usr/local/sbin/lvm /usr/local/sbin/dmsetup; do \
+      echo "--- $f"; \
+      interp="$(strings "$f" | sed -n 's#^\(/[^[:space:]]*ld[^[:space:]]*\.so[^[:space:]]*\)$#\1#p' | head -n 1)"; \
+      echo "INTERP=$interp"; \
+      [ -n "$interp" ] || { echo "NO_INTERP_FOUND"; exit 1; }; \
+      ls -l "$interp" || true; \
+    done; \
+    \
+    echo "=== Try executing (will reveal next missing thing) ==="; \
+    /usr/local/sbin/lvm version || true; \
+    /usr/local/sbin/dmsetup version || true

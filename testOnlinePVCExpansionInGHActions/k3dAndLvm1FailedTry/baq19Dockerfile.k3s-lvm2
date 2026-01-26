@@ -1,0 +1,42 @@
+FROM debian:11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Debian 11 (bullseye) LVM stack + the shared libraries observed in the kind node `ldd` output.
+# Includes udev/systemd userspace components typically present in kind nodes.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      lvm2 \
+      dmsetup \
+      libdevmapper-event1.02.1 \
+      libdevmapper1.02.1 \
+      libblkid1 \
+      libaio1 \
+      libedit2 \
+      libsystemd0 \
+      libudev1 \
+      udev \
+      systemd \
+      systemd-sysv \
+      kmod \
+      util-linux \
+      e2fsprogs \
+      ca-certificates \
+      procps \
+      iproute2 \
+      iptables \
+      libcap2-bin \
+      elfutils \
+      file \
+      ; \
+    rm -rf /var/lib/apt/lists/*; \
+    command -v lvm; \
+    command -v dmsetup; \
+    lvm version; \
+    dmsetup version || true; \
+    ldd /sbin/lvm; \
+    ldd /sbin/dmsetup
+
+# Keep it generic; runtime entrypoint comes later when you add k3s/k3d specifics.
+CMD ["bash", "-lc", "set -eux; cat /etc/os-release; uname -a; lvm version; dmsetup version || true; ls -l /dev/mapper || true; ls -l /dev/loop* || true"]

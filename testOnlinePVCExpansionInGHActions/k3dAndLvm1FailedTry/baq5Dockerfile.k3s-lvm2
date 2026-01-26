@@ -1,0 +1,34 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl; \
+    mkdir -p /out/bin /out/etc/lvm /out/lib /out/usr/lib; \
+    cp -a /sbin/lvm /out/bin/; \
+    for b in pvcreate pvdisplay pvs vgcreate vgdisplay vgs lvcreate lvdisplay lvs lvextend lvreduce lvremove vgremove pvremove dmsetup; do \
+      if [ -x "/sbin/$b" ]; then cp -a "/sbin/$b" "/out/bin/$b"; fi; \
+      if [ -x "/usr/sbin/$b" ]; then cp -a "/usr/sbin/$b" "/out/bin/$b"; fi; \
+    done; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi; \
+    cp -a /lib/ld-musl-x86_64.so.1 /out/lib/; \
+    for f in /out/bin/lvm /out/bin/dmsetup; do \
+      ldd "$f" | sed -n 's/.* => \(\/[^ ]*\).*/\1/p; s/^\(\/[^ ]*\).*/\1/p'; \
+    done | sort -u | while read -r so; do \
+      [ -f "$so" ] || continue; \
+      mkdir -p "/out$(dirname "$so")"; \
+      cp -a "$so" "/out$so"; \
+    done
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/bin/ /usr/local/sbin/
+COPY --from=lvm /out/etc/lvm/ /etc/lvm/
+COPY --from=lvm /out/lib/ /lib/
+COPY --from=lvm /out/usr/lib/ /usr/lib/
+
+RUN set -eux; \
+    /bin/busybox sh -lc '\
+      ls -l /lib/ld-musl-x86_64.so.1; \
+      /usr/local/sbin/lvm version; \
+      /usr/local/sbin/lvm help >/dev/null; \
+      /usr/local/sbin/dmsetup version || true \
+    '

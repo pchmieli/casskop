@@ -1,0 +1,39 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl \
+      pax-utils; \
+    mkdir -p /out/usr/local/sbin /out/etc/lvm; \
+    cp -a /sbin/lvm /out/usr/local/sbin/; \
+    cp -a /sbin/dmsetup /out/usr/local/sbin/; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi; \
+    \
+    # Copy the musl loader (interpreter)
+    mkdir -p /out/lib; \
+    cp -a /lib/ld-musl-x86_64.so.1 /out/lib/; \
+    \
+    # Copy all required shared libs as resolved on Alpine (correct versions + symlinks)
+    mkdir -p /out/lib /out/usr/lib; \
+    for bin in /out/usr/local/sbin/lvm /out/usr/local/sbin/dmsetup; do \
+      scanelf --needed --nobanner "$bin" \
+        | awk -F'[][]' '{print $2}' \
+        | tr ',' '\n' \
+        | while read -r so; do \
+            [ -n "$so" ] || continue; \
+            p="$(ldconfig -p 2>/dev/null | awk -v n="$so" '$1==n {print $NF; exit}')" || true; \
+            if [ -z "${p:-}" ]; then \
+              p="$(find /lib /usr/lib -maxdepth 2 -type f -name "$so" 2>/dev/null | head -n 1)" || true; \
+            fi; \
+            [ -n "${p:-}" ] || { echo "MISSING_SO=$so"; exit 1; }; \
+            mkdir -p "/out$(dirname "$p")"; \
+            cp -a "$p" "/out$p"; \
+          done; \
+    done
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/ /
+
+RUN set -eux; \
+    /usr/local/sbin/lvm version || true; \
+    /usr/local/sbin/dmsetup version || true

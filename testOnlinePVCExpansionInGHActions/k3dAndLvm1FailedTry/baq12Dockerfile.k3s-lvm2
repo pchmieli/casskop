@@ -1,0 +1,30 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl; \
+    mkdir -p /out/usr/local/sbin /out/etc/lvm; \
+    cp -a /sbin/lvm /out/usr/local/sbin/; \
+    cp -a /sbin/dmsetup /out/usr/local/sbin/; \
+    \
+    echo "=== VERIFY lvm stage output paths ==="; \
+    ls -l /out/usr/local/sbin/; \
+    test -x /out/usr/local/sbin/lvm; \
+    test -x /out/usr/local/sbin/dmsetup; \
+    \
+    echo "=== VERIFY lvm stage deps (for later) ==="; \
+    ldd /out/usr/local/sbin/lvm || true; \
+    ldd /out/usr/local/sbin/dmsetup || true
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/ /
+
+RUN set -eux; \
+    echo "=== VERIFY final image has the binaries ==="; \
+    ls -l /usr/local/sbin/ || true; \
+    test -x /usr/local/sbin/lvm; \
+    test -x /usr/local/sbin/dmsetup; \
+    \
+    echo "=== Try executing (will reveal next missing thing) ==="; \
+    /usr/local/sbin/lvm version || true; \
+    /usr/local/sbin/dmsetup version || true

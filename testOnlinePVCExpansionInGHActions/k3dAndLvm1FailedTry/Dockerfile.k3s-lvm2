@@ -1,0 +1,57 @@
+FROM debian:11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      lvm2 \
+      dmsetup \
+      libdevmapper-event1.02.1 \
+      libdevmapper1.02.1 \
+      libblkid1 \
+      libaio1 \
+      libedit2 \
+      libudev1 \
+      udev \
+      kmod \
+      util-linux \
+      e2fsprogs \
+      ca-certificates \
+      procps \
+      iproute2 \
+      iptables \
+      libcap2-bin \
+      elfutils \
+      file \
+      curl \
+      ; \
+    rm -rf /var/lib/apt/lists/*
+
+ARG K3S_VERSION=v1.24.13+k3s1
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    if [ -n "${TARGETARCH:-}" ]; then \
+      arch="${TARGETARCH}"; \
+    fi; \
+    case "${arch}" in \
+      amd64|x86_64) k3s_arch="" ;; \
+      arm64|aarch64) k3s_arch="-arm64" ;; \
+      armhf|arm/v7|arm) k3s_arch="-armhf" ;; \
+      *) echo "Unsupported arch: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/k3s \
+      "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION}/k3s${k3s_arch}"; \
+    chmod +x /usr/local/bin/k3s; \
+    /usr/local/bin/k3s --version
+
+RUN mkdir -p /var/lib/rancher/k3s /var/lib/kubelet /var/lib/cni /var/log /run /tmp
+
+EXPOSE 6443
+
+ENTRYPOINT ["/usr/local/bin/k3s"]
+CMD ["server", "--disable=servicelb", "--disable=traefik", "--tls-san=0.0.0.0"]

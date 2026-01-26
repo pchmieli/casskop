@@ -1,0 +1,39 @@
+## test-pvc.yaml
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: test-nfs-pvc
+#spec:
+#  accessModes:
+#    - ReadWriteMany
+#  storageClassName: nfs-client
+#  resources:
+#    requests:
+#      storage: 1Gi
+---
+# test-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-nfs-pod
+spec:
+  containers:
+    - name: test
+      image: busybox
+      command:
+        - sh
+        - -c
+        - |
+          while true; do
+            df -h /mnt/data
+            echo "Writing test file..."
+            dd if=/dev/zero of=/mnt/data/testfile bs=1M count=100 2>&1
+            sleep 10
+          done
+      volumeMounts:
+        - name: data
+          mountPath: /mnt/data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: test-nfs-pvc

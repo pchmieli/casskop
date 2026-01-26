@@ -1,0 +1,51 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl; \
+    mkdir -p /out/usr/local/sbin /out/etc/lvm; \
+    \
+    # Binaries in the final-path location
+    cp -a /sbin/lvm /out/usr/local/sbin/; \
+    if [ -x /sbin/dmsetup ]; then cp -a /sbin/dmsetup /out/usr/local/sbin/; fi; \
+    for b in pvcreate pvdisplay pvs vgcreate vgdisplay vgs lvcreate lvdisplay lvs lvextend lvreduce lvremove vgremove pvremove; do \
+      if [ -x "/sbin/$b" ]; then cp -a "/sbin/$b" "/out/usr/local/sbin/$b"; fi; \
+      if [ -x "/usr/sbin/$b" ]; then cp -a "/usr/sbin/$b" "/out/usr/local/sbin/$b"; fi; \
+    done; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi; \
+    \
+    # Copy shared libraries from their owning packages (only files under /lib or /usr/lib)
+    copy_pkg_libs() { \
+      pkg="$1"; \
+      apk info -L "$pkg" \
+        | sed -n 's|^\(/.*\)$|\1|p' \
+        | while read -r p; do \
+            case "$p" in \
+              /lib/*|/usr/lib/*) \
+                if [ -f "$p" ]; then \
+                  mkdir -p "/out$(dirname "$p")"; \
+                  cp -a "$p" "/out$p"; \
+                fi \
+              ;; \
+            esac; \
+          done; \
+    }; \
+    for pkg in musl libaio libblkid libuuid device-mapper-libs lvm2-libs; do \
+      copy_pkg_libs "$pkg"; \
+    done; \
+    \
+    # Sanity: show whether the two problematic libs are now staged
+    find /out -maxdepth 3 -type f \( -name 'libblkid.so.1*' -o -name 'libaio.so.1*' \) -print
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/ /
+
+RUN set -eux; \
+    /bin/busybox sh -lc '\
+      ls -l /usr/local/sbin/lvm; \
+      ls -l /lib/libblkid.so.1* /usr/lib/libblkid.so.1* 2>/dev/null || true; \
+      ls -l /lib/libaio.so.1*  /usr/lib/libaio.so.1*  2>/dev/null || true; \
+      /usr/local/sbin/lvm version; \
+      /usr/local/sbin/lvm help >/dev/null; \
+      /usr/local/sbin/dmsetup version || true \
+    '

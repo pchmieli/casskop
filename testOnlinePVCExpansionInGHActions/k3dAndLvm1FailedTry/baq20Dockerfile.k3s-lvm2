@@ -1,0 +1,54 @@
+dockerfile
+# File: `.github/workflows/Dockerfile.k3s-lvm2`
+FROM debian:11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Versions: pin k3s for reproducibility
+ARG K3S_VERSION=v1.24.13+k3s1
+ARG TARGETARCH=amd64
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      lvm2 \
+      dmsetup \
+      libdevmapper-event1.02.1 \
+      libdevmapper1.02.1 \
+      libblkid1 \
+      libaio1 \
+      libedit2 \
+      libsystemd0 \
+      libudev1 \
+      udev \
+      systemd \
+      systemd-sysv \
+      kmod \
+      util-linux \
+      e2fsprogs \
+      ca-certificates \
+      procps \
+      iproute2 \
+      iptables \
+      libcap2-bin \
+      elfutils \
+      file \
+      curl \
+      ; \
+    rm -rf /var/lib/apt/lists/*
+
+# Install k3s server binary
+RUN set -eux; \
+    curl -fsSL -o /usr/local/bin/k3s \
+      "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION}/k3s"; \
+    chmod +x /usr/local/bin/k3s; \
+    /usr/local/bin/k3s --version
+
+# k3s data dir (k3d commonly uses this)
+VOLUME ["/var/lib/rancher/k3s"]
+
+# Minimal defaults; k3d typically overrides args/env as needed
+EXPOSE 6443
+
+ENTRYPOINT ["/usr/local/bin/k3s"]
+CMD ["server"]

@@ -1,0 +1,49 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-lvm-sc
+provisioner: local.csi.openebs.io
+parameters:
+  storage: "lvm"
+  volgroup: "lvmvg"
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lvm-pvc
+spec:
+  storageClassName: openebs-lvm-sc
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-lvm-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-lvm
+  template:
+    metadata:
+      labels:
+        app: test-lvm
+    spec:
+      containers:
+        - name: test-container
+          image: nginx
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do df -h /data; sleep 30; done"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lvm-pvc

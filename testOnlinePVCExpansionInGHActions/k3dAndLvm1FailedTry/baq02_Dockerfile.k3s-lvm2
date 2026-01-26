@@ -1,0 +1,61 @@
+FROM debian:bookworm-slim AS lvm
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends lvm2 ca-certificates binutils libc-bin; \
+    rm -rf /var/lib/apt/lists/*; \
+    mkdir -p /out/bin /out/etc/lvm
+
+# Copy the lvm binaries (keep in /out/bin)
+RUN set -eux; \
+    cp -a /sbin/lvm /out/bin/; \
+    for b in pvcreate pvdisplay pvs vgcreate vgdisplay vgs lvcreate lvdisplay lvs lvextend lvreduce lvremove vgremove pvremove; do \
+      if [ -x "/sbin/$b" ]; then cp -a "/sbin/$b" "/out/bin/$b"; fi; \
+    done
+
+# Copy lvm config (optional)
+RUN set -eux; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi
+
+
+RUN set -eux; \
+  f=/out/bin/lvcreate; \
+  echo "== raw readelf output (interpreter lines) =="; \
+  readelf -l "$f" | sed -n '/Requesting program interpreter/p'; \
+  echo "== what awk extracts (field 2 split by [ and ]) =="; \
+  readelf -l "$f" | awk -F'[][]' '/Requesting program interpreter/ {print "EXTRACTED=[" $2 "]"; exit}'; \
+  echo "== byte-level view of extracted value (shows hidden chars) =="; \
+  interp="$(readelf -l "$f" | awk -F'[][]' '/Requesting program interpreter/ {print $2; exit}')"; \
+  printf '%s' "$interp" | od -An -t x1; \
+  echo; \
+  echo "== does that path exist in the builder? =="; \
+  ls -l "$interp" || true
+
+# Copy the dynamic loader + all shared libs needed by every copied binary
+RUN set -eux; \
+    mkdir -p /out/rootfs; \
+    for f in /out/bin/*; do \
+      echo "Collecting deps for $f"; \
+      interp="$(readelf -l "$f" | awk -F'[][]' '/Requesting program interpreter/ {print $2; exit}')" ; \
+      if [ -n "${interp:-}" ]; then \
+        mkdir -p "/out/rootfs$(dirname "$interp")"; \
+        cp -a "$interp" "/out/rootfs$interp"; \
+      fi; \
+      ldd "$f" | awk '/=> \//{print $3} /^\//{print $1}' | sort -u | while read -r lib; do \
+        [ -e "$lib" ] || continue; \
+        mkdir -p "/out/rootfs$(dirname "$lib")"; \
+        cp -a "$lib" "/out/rootfs$lib"; \
+      done; \
+    done
+
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/bin/ /usr/local/sbin/
+COPY --from=lvm /out/etc/lvm/ /etc/lvm/
+COPY --from=lvm /out/rootfs/ /
+
+# Build-time verification inside the final image filesystem
+RUN set -eux; \
+    /bin/busybox sh -lc 'ls -l /usr/local/sbin/lvm; \
+      (command -v readelf >/dev/null 2>&1 && readelf -l /usr/local/sbin/lvm | sed -n "s/.*interpreter: \\(.*\\)\\].*/INTERP=\\1/p") || true; \
+      (ls -l /lib*/ld-linux* /lib*/libc.so.* 2>/dev/null) || true'
+

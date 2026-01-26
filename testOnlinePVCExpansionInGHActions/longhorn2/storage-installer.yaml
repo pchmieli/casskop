@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: storage-installer
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: storage-installer
+  template:
+    metadata:
+      labels:
+        app: storage-installer
+    spec:
+      hostPID: true
+      hostNetwork: true
+      initContainers:
+        - name: install-storage-tools
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              apk add --no-cache open-iscsi util-linux e2fsprogs e2fsprogs-libs kmod openssl xz zstd
+
+              echo "Installing binaries..."
+              cp /usr/sbin/iscsid /host/usr/sbin/
+              cp /usr/sbin/iscsiadm /host/usr/sbin/
+              cp /bin/mount /host/bin/
+              cp /bin/umount /host/bin/
+              cp /sbin/mkfs.ext4 /host/sbin/
+              cp /sbin/fsck.ext4 /host/sbin/
+
+              echo "Installing libraries..."
+              # Copy base musl libc
+              cp -a /lib/ld-musl-*.so* /host/lib/
+
+              # Function to copy library from both locations
+              copy_libs() {
+                for lib in "$@"; do
+                  for file in /lib/${lib}*; do
+                    [ -e "$file" ] && cp -a "$file" /host/lib/ 2>/dev/null || true
+                  done
+                  for file in /usr/lib/${lib}*; do
+                    [ -e "$file" ] && cp -a "$file" /host/usr/lib/ 2>/dev/null || true
+                  done
+                done
+              }
+
+              # Copy all required libraries
+              copy_libs \
+                libopeniscsiusr.so \
+                libkmod.so \
+                libcrypto.so \
+                libssl.so \
+                libisns.so \
+                libblkid.so \
+                libmount.so \
+                libuuid.so \
+                libsmartcols.so \
+                libz.so \
+                libfdisk.so \
+                libzstd.so \
+                liblzma.so \
+                libext2fs.so \
+                libcom_err.so \
+                libe2p.so
+
+              echo "Verifying tools..."
+              ldd /usr/sbin/iscsiadm | grep "not found" && echo "ERROR: iscsiadm missing deps!" || echo "✓ iscsiadm OK"
+              ldd /sbin/mkfs.ext4 | grep "not found" && echo "ERROR: mkfs.ext4 missing deps!" || echo "✓ mkfs.ext4 OK"
+
+              echo "Storage utilities installed successfully"
+          volumeMounts:
+            - name: host-bin
+              mountPath: /host/bin
+            - name: host-sbin
+              mountPath: /host/sbin
+            - name: host-usr-sbin
+              mountPath: /host/usr/sbin
+            - name: host-lib
+              mountPath: /host/lib
+            - name: host-usr-lib
+              mountPath: /host/usr/lib
+          securityContext:
+            privileged: true
+      containers:
+        - name: iscsi-service
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache open-iscsi
+              mkdir -p /var/lib/iscsi /run/lock/iscsi
+              iscsid
+              sleep infinity
+          securityContext:
+            privileged: true
+      volumes:
+        - name: host-bin
+          hostPath:
+            path: /bin
+        - name: host-sbin
+          hostPath:
+            path: /sbin
+        - name: host-usr-sbin
+          hostPath:
+            path: /usr/sbin
+        - name: host-lib
+          hostPath:
+            path: /lib
+        - name: host-usr-lib
+          hostPath:
+            path: /usr/lib

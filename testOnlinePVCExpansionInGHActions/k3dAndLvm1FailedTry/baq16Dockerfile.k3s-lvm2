@@ -1,0 +1,46 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl \
+      pax-utils; \
+    \
+    mkdir -p /out/usr/local/sbin /out/etc/lvm; \
+    cp -a /sbin/lvm /out/usr/local/sbin/; \
+    cp -a /sbin/dmsetup /out/usr/local/sbin/; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi; \
+    \
+    # Ensure musl interpreter exists in final image at the path encoded in the ELF
+    mkdir -p /out/lib; \
+    cp -a /lib/ld-musl-x86_64.so.1 /out/lib/; \
+    \
+    # Copy dependency closure (real files + symlinks) from the Alpine stage
+    for bin in /out/usr/local/sbin/lvm /out/usr/local/sbin/dmsetup; do \
+      scanelf --needed --nobanner "$bin" \
+        | awk -F'[][]' '{print $2}' \
+        | tr ',' '\n' \
+        | sort -u \
+        | while read -r so; do \
+            [ -n "$so" ] || continue; \
+            src="$(find /lib /usr/lib -maxdepth 2 \( -type f -o -type l \) -name "$so" | head -n 1)"; \
+            [ -n "$src" ] || { echo "MISSING_SO=$so"; exit 1; }; \
+            mkdir -p "/out$(dirname "$src")"; \
+            cp -a "$src" "/out$src"; \
+            # If it's a symlink, also copy its target (the real .so file)
+            if [ -L "$src" ]; then \
+              tgt="$(readlink -f "$src")"; \
+              mkdir -p "/out$(dirname "$tgt")"; \
+              cp -a "$tgt" "/out$tgt"; \
+            fi; \
+          done; \
+    done; \
+    \
+    # Optional: prove the libs are now present in the staged output
+    ls -l /out/lib /out/usr/lib || true
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/ /
+
+RUN set -eux; \
+    /usr/local/sbin/lvm version || true; \
+    /usr/local/sbin/dmsetup version || true

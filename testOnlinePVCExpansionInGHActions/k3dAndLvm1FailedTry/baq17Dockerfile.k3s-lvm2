@@ -1,0 +1,33 @@
+# `Dockerfile.k3s-ubuntu-lvm2`
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      iptables \
+      iproute2 \
+      kmod \
+      udev \
+      lvm2 \
+      dmsetup \
+      e2fsprogs \
+      util-linux \
+      mount \
+      tzdata; \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy `k3s` binary from the official image
+COPY --from=rancher/k3s:v1.24.13-k3s1 \
+  /bin/k3s \
+  /usr/local/bin/k3s
+
+RUN set -eux; \
+    /usr/local/bin/k3s --version; \
+    lvm version; \
+    dmsetup version
+
+ENTRYPOINT ["/usr/local/bin/k3s"]
+CMD ["server"]

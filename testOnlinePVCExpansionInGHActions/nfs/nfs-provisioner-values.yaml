@@ -1,0 +1,8 @@
+nfs:
+  server: 172.22.0.4
+  path: /
+  mountOptions:
+    - vers=4.2
+    - minorversion=2
+    - proto=tcp
+    - soft

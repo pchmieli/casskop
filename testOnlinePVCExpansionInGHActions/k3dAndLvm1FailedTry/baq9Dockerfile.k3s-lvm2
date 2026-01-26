@@ -1,0 +1,47 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache \
+      lvm2 device-mapper e2fsprogs util-linux \
+      libaio libblkid libuuid musl; \
+    mkdir -p /out/bin /out/etc/lvm; \
+    cp -a /sbin/lvm /out/bin/; \
+    for b in pvcreate pvdisplay pvs vgcreate vgdisplay vgs lvcreate lvdisplay lvs lvextend lvreduce lvremove vgremove pvremove dmsetup; do \
+      if [ -x "/sbin/$b" ]; then cp -a "/sbin/$b" "/out/bin/$b"; fi; \
+      if [ -x "/usr/sbin/$b" ]; then cp -a "/usr/sbin/$b" "/out/bin/$b"; fi; \
+    done; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi; \
+    \
+    copy_apk_files() { \
+      pkg="$1"; \
+      apk info -L "$pkg" \
+        | sed -n 's|^\(/.*\)$|\1|p' \
+        | while read -r p; do \
+            [ -f "$p" ] || continue; \
+            mkdir -p "/out$(dirname "$p")"; \
+            cp -a "$p" "/out$p"; \
+          done; \
+    }; \
+    \
+    for pkg in musl libaio libblkid libuuid device-mapper-libs lvm2-libs; do \
+      copy_apk_files "$pkg"; \
+    done; \
+    \
+    # after core libs are present, optionally pull any additional deps
+    for f in /out/bin/lvm /out/bin/dmsetup; do \
+      ldd "$f" | sed -n 's/.* => \(\/[^ ]*\).*/\1/p; s/^\(\/[^ ]*\).*/\1/p'; \
+    done | sort -u | while read -r so; do \
+      [ -f "$so" ] || continue; \
+      mkdir -p "/out$(dirname "$so")"; \
+      cp -a "$so" "/out$so"; \
+    done
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/ /
+
+RUN set -eux; \
+    /bin/busybox sh -lc '\
+      ls -l /lib/ld-musl-x86_64.so.1; \
+      /usr/local/sbin/lvm version; \
+      /usr/local/sbin/lvm help >/dev/null; \
+      /usr/local/sbin/dmsetup version || true \
+    '

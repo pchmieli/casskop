@@ -1,0 +1,22 @@
+FROM alpine:3.20 AS lvm
+RUN set -eux; \
+    apk add --no-cache lvm2 device-mapper e2fsprogs util-linux; \
+    mkdir -p /out/bin /out/etc/lvm; \
+    cp -a /sbin/lvm /out/bin/; \
+    for b in pvcreate pvdisplay pvs vgcreate vgdisplay vgs lvcreate lvdisplay lvs lvextend lvreduce lvremove vgremove pvremove dmsetup; do \
+      if [ -x "/sbin/$b" ]; then cp -a "/sbin/$b" "/out/bin/$b"; fi; \
+      if [ -x "/usr/sbin/$b" ]; then cp -a "/usr/sbin/$b" "/out/bin/$b"; fi; \
+    done; \
+    if [ -d /etc/lvm ]; then cp -a /etc/lvm/* /out/etc/lvm/; fi
+
+FROM rancher/k3s:v1.24.13-k3s1
+COPY --from=lvm /out/bin/ /usr/local/sbin/
+COPY --from=lvm /out/etc/lvm/ /etc/lvm/
+
+# Build-time verification inside the final image filesystem
+RUN set -eux; \
+    /bin/busybox sh -lc '\
+      ls -l /usr/local/sbin/lvm; \
+      /usr/local/sbin/lvm version; \
+      /usr/local/sbin/dmsetup version || true \
+    '

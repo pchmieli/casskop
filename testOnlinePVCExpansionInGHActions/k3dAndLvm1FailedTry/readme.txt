@@ -1,0 +1,1 @@
+No DaemonSet - just try to prepare Dockerfile with both k3s server and LVM support
