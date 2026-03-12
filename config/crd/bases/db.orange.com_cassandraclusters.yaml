@@ -2364,7 +2364,6 @@ spec:
                                 oldHostId:
                                   type: string
                                 oldPodIp:
-                                  description: Node replacement state (for replace_address_first_boot approach)
                                   type: string
                                 oldPvName:
                                   type: string
@@ -2385,14 +2384,8 @@ spec:
                                 repairStartTime:
                                   type: string
                                 repairTriggered:
-                                  description: Repair state (set during storage migration)
                                   type: boolean
                                 tempPvcDump:
-                                  type: string
-                                tokenRangesAfterMigration:
-                                  type: string
-                                tokenRangesBeforeMigration:
-                                  description: 'Diagnostics: Token ranges and nodetool status captured before/after migration'
                                   type: string
                           stsDeletedWithOrphan:
                             type: boolean

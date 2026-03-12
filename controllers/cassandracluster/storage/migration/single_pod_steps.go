@@ -195,7 +195,7 @@ func captureDiagnosticsBeforeMigration(ctx context.Context, rack view.RackView, 
 
 	// Check if already captured
 	podState := rack.RackStatus().StorageMigrationState.Pods[podName]
-	if podState.TokenRangesBeforeMigration != "" && podState.NodetoolStatusBeforeMigration != "" {
+	if podState.NodetoolStatusBeforeMigration != "" {
 		rack.Log().Infof("Diagnostics already captured for pod %s before migration", podName)
 		return as.Pass()
 	}
@@ -206,7 +206,6 @@ func captureDiagnosticsBeforeMigration(ctx context.Context, rack view.RackView, 
 	}
 
 	// Store in migration state
-	podState.TokenRangesBeforeMigration = tokenRanges
 	podState.NodetoolStatusBeforeMigration = nodetoolStatus
 	rack.RackStatus().StorageMigrationState.Pods[podName] = podState
 
@@ -844,7 +843,7 @@ func captureDiagnosticsAfterMigration(ctx context.Context, rack view.RackView, c
 
 	// Check if already captured
 	podState := rack.RackStatus().StorageMigrationState.Pods[podName]
-	if podState.TokenRangesAfterMigration != "" && podState.NodetoolStatusAfterMigration != "" {
+	if podState.NodetoolStatusAfterMigration != "" {
 		rack.Log().Infof("Diagnostics already captured for pod %s after migration", podName)
 		return as.Pass()
 	}
@@ -855,7 +854,6 @@ func captureDiagnosticsAfterMigration(ctx context.Context, rack view.RackView, c
 	}
 
 	// Store in migration state
-	podState.TokenRangesAfterMigration = tokenRanges
 	podState.NodetoolStatusAfterMigration = nodetoolStatus
 	rack.RackStatus().StorageMigrationState.Pods[podName] = podState
 

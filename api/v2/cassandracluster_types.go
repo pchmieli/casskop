@@ -1064,12 +1064,14 @@ type PodStorageMigrationState struct {
 	PodTemplateDump string `json:"podTemplateDump,omitempty"` // JSON dump of pod template from StatefulSet
 
 	// Repair state (set during storage migration)
+
 	RepairTriggered bool   `json:"repairTriggered,omitempty"`
 	RepairCommandID string `json:"repairCommandId,omitempty"`
 	RepairStartTime string `json:"repairStartTime,omitempty"`
 	RepairCompleted bool   `json:"repairCompleted,omitempty"`
 
 	// Node replacement state (for replace_address_first_boot approach)
+
 	OldPodIP      string `json:"oldPodIp,omitempty"`
 	OldHostID     string `json:"oldHostId,omitempty"`
 	NewPodIP      string `json:"newPodIp,omitempty"`
@@ -1080,9 +1082,8 @@ type PodStorageMigrationState struct {
 	PodRecreated  bool   `json:"podRecreated,omitempty"` // Individual pod recreated (not whole STS)
 	Migrated      bool   `json:"migrated,omitempty"`
 
-	// Diagnostics: Token ranges and nodetool status captured before/after migration
-	TokenRangesBeforeMigration    string `json:"tokenRangesBeforeMigration,omitempty"`
-	TokenRangesAfterMigration     string `json:"tokenRangesAfterMigration,omitempty"`
+	// Diagnostics: nodetool status captured before/after migration
+
 	NodetoolStatusBeforeMigration string `json:"nodetoolStatusBeforeMigration,omitempty"`
 	NodetoolStatusAfterMigration  string `json:"nodetoolStatusAfterMigration,omitempty"`
 }
