@@ -231,9 +231,20 @@ if [ -n "$STATUS_FILE" ] && [ -f "$STATUS_FILE" ]; then
     AVG_LOAD_GIB=$(grep "UN" "$STATUS_FILE" | awk 'NF > 5 {
         load = $3;
         unit = $4;
-        # Only process if unit is GiB
-        if (unit ~ /GiB/) {
-            total += load;
+        # Convert all units to GiB for consistent averaging
+        load_in_gib = 0;
+        if (unit ~ /MiB/) {
+            load_in_gib = load / 1024;
+        } else if (unit ~ /GiB/) {
+            load_in_gib = load;
+        } else if (unit ~ /TiB/) {
+            load_in_gib = load * 1024;
+        } else if (unit ~ /KiB/) {
+            load_in_gib = load / 1024 / 1024;
+        }
+
+        if (load_in_gib > 0) {
+            total += load_in_gib;
             count++;
         }
     }
